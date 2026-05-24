@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { id: 'orders',    label: 'הזמנות',     Icon: ITruck },
   { id: 'transfers', label: 'העברות',     Icon: ITransfer },
   { id: 'promos',    label: 'מבצעים',     Icon: ITag },
+  { id: 'sales',     label: 'מכירות',     Icon: ICoin },
 ];
 const NAV_SECONDARY = [
   { id: 'daily',     label: 'סיכום יומי',  Icon: ICalendar },
@@ -56,6 +57,7 @@ function App() {
     orders:    'הזמנות',
     transfers: 'העברות',
     promos:    'מבצעים',
+    sales:     'מוצרים מובילים',
     daily:     'סיכום יומי',
     monthly:   'סיכום חודשי',
     analysis:  'ניתוח וחריגות',
@@ -171,6 +173,7 @@ function App() {
         {tab === 'daily'     && <Daily />}
         {tab === 'monthly'   && <Monthly />}
         {tab === 'analysis'  && <Analysis activeBranch={activeBranch} />}
+        {tab === 'sales'     && <Sales activeBranch={activeBranch} />}
       </main>
 
       {/* Modals */}
