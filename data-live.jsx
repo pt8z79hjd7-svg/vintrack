@@ -18,7 +18,7 @@ Object.assign(window, {
     { id: 'kohav', name: 'כוכב הצפון', color: 'oklch(0.62 0.14 60)' },
   ],
   CATEGORIES: [{ id: 'all', label: 'הכל' }], SUPPLIERS: [], PRODUCTS: [],
-  MONTHLY: [], DAILY_SAMPLE: {}, ORDERS: [], TRANSFERS: [], PROMOTIONS: [],
+  MONTHLY: [], DAILY_SAMPLE: {}, DAILY_BY_DATE: {}, ORDERS: [], TRANSFERS: [], PROMOTIONS: [],
   ACTIVITY: [], INVENTORY_VALUE_BY_MONTH: [], PAST_ORDERS: {}, LAST_RECEIVED: {},
 });
 
@@ -27,7 +27,7 @@ async function loadAllData() {
   const [prodR, monR, dayR, invR, dealR, transR, ordR] = await Promise.all([
     sb.from('products').select('*').limit(5000),
     sb.from('monthly_summary').select('*'),
-    sb.from('daily_summary').select('*').order('summary_date', { ascending: false }).limit(1),
+    sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
     sb.from('supplier_inventory').select('*'),
     sb.from('import_deals').select('*'),
     sb.from('transfers').select('*'),
@@ -83,12 +83,17 @@ async function loadAllData() {
       extra: n(r.additional_income), current: r.month === curMonth,
     }));
 
-  // יומי (אחרון)
-  const d0 = (dayR.data || [])[0] || {};
-  const DAILY_SAMPLE = {
-    date: d0.summary_date || '', total: n(d0.revenue_total), mikado: n(d0.revenue_mikado),
-    kohav: n(d0.revenue_kochav), profit: n(d0.profit_est), margin: n(d0.margin_pct), lines: [],
-  };
+  // יומי — כל הימים, לבחירה לפי תאריך
+  const dailyRows = dayR.data || [];
+  const mkDay = (r) => ({
+    date: r.summary_date || '', total: n(r.revenue_total), mikado: n(r.revenue_mikado),
+    kohav: n(r.revenue_kochav), profit: n(r.profit_est), margin: n(r.margin_pct),
+    salesLines: n(r.sales_lines), lines: [],
+  });
+  const DAILY_BY_DATE = {};
+  dailyRows.forEach((r) => { if (r.summary_date) DAILY_BY_DATE[r.summary_date] = mkDay(r); });
+  const DAILY_SAMPLE = dailyRows[0] ? mkDay(dailyRows[0])
+    : { date: '', total: 0, mikado: 0, kohav: 0, profit: 0, margin: 0, salesLines: 0, lines: [] };
 
   // שווי מלאי לפי ספק/חודש
   const invMap = {};
@@ -124,7 +129,7 @@ async function loadAllData() {
   }));
 
   Object.assign(window, {
-    BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS, MONTHLY, DAILY_SAMPLE,
+    BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
   });
