@@ -57,6 +57,9 @@ async function loadAllData() {
       stock: { mikado: n(p.parallel_stock_mikado), kohav: n(p.parallel_stock_kochav) },
     } : null,
     extra: p.extra_barcodes || [],
+    weekly: n(p.weekly_velocity),
+    margin: n(p.profit_margin),
+    is_promo: !!p.is_promo,
     updated: '',
   }));
 

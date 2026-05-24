@@ -9,6 +9,7 @@ const NAV_ITEMS = [
 const NAV_SECONDARY = [
   { id: 'daily',     label: 'סיכום יומי',  Icon: ICalendar },
   { id: 'monthly',   label: 'סיכום חודשי', Icon: ITrend },
+  { id: 'analysis',  label: 'ניתוח וחריגות', Icon: IPercent },
 ];
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -57,6 +58,7 @@ function App() {
     promos:    'מבצעים',
     daily:     'סיכום יומי',
     monthly:   'סיכום חודשי',
+    analysis:  'ניתוח וחריגות',
   };
 
   return (
@@ -168,6 +170,7 @@ function App() {
         {tab === 'promos'    && <Promotions />}
         {tab === 'daily'     && <Daily />}
         {tab === 'monthly'   && <Monthly />}
+        {tab === 'analysis'  && <Analysis activeBranch={activeBranch} />}
       </main>
 
       {/* Modals */}
