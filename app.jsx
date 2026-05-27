@@ -8,10 +8,11 @@ const NAV_ITEMS = [
   { id: 'sales',     label: 'מכירות',     Icon: ICoin },
 ];
 const NAV_SECONDARY = [
-  { id: 'daily',     label: 'סיכום יומי',  Icon: ICalendar },
-  { id: 'monthly',   label: 'סיכום חודשי', Icon: ITrend },
-  { id: 'analysis',  label: 'ניתוח וחריגות', Icon: IPercent },
-  { id: 'settings',  label: 'הגדרות',      Icon: ISettings },
+  { id: 'daily',        label: 'סיכום יומי',  Icon: ICalendar },
+  { id: 'monthly',      label: 'סיכום חודשי', Icon: ITrend },
+  { id: 'new-products', label: 'מוצרים חדשים', Icon: IPlus },
+  { id: 'analysis',     label: 'ניתוח וחריגות', Icon: IPercent },
+  { id: 'settings',     label: 'הגדרות',      Icon: ISettings },
 ];
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -71,8 +72,9 @@ function App() {
     sales:     'מוצרים מובילים',
     daily:     'סיכום יומי',
     monthly:   'סיכום חודשי',
-    analysis:  'ניתוח וחריגות',
-    settings:  'הגדרות',
+    analysis:      'ניתוח וחריגות',
+    'new-products': 'מוצרים חדשים',
+    settings:      'הגדרות',
   };
 
   return (
@@ -126,14 +128,21 @@ function App() {
         })}
 
         <div className="nav-group-label">דוחות</div>
-        {NAV_SECONDARY.map(({ id, label, Icon }) => (
-          <button key={id}
-                  className={`nav-item ${tab === id ? 'active' : ''}`}
-                  onClick={() => handleNav(id)}>
-            <Icon className="icon" size={18} />
-            <span>{label}</span>
-          </button>
-        ))}
+        {NAV_SECONDARY.map(({ id, label, Icon }) => {
+          let badge;
+          if (id === 'new-products') {
+            badge = PRODUCTS.filter(p => !p.cost || p.cost <= 0 || !p.price || p.price <= 0).length;
+          }
+          return (
+            <button key={id}
+                    className={`nav-item ${tab === id ? 'active' : ''}`}
+                    onClick={() => handleNav(id)}>
+              <Icon className="icon" size={18} />
+              <span>{label}</span>
+              {badge ? <span className="badge warn">{badge}</span> : null}
+            </button>
+          );
+        })}
 
         <div className="sidebar-footer">
           <div className="avatar">יא</div>
@@ -198,8 +207,9 @@ function App() {
         {tab === 'promos'    && <Promotions activeBranch={activeBranch} />}
         {tab === 'daily'     && <Daily activeBranch={activeBranch} />}
         {tab === 'monthly'   && <Monthly activeBranch={activeBranch} />}
-        {tab === 'analysis'  && <Analysis activeBranch={activeBranch} />}
-        {tab === 'sales'     && <Sales activeBranch={activeBranch} />}
+        {tab === 'analysis'      && <Analysis activeBranch={activeBranch} />}
+        {tab === 'sales'         && <Sales activeBranch={activeBranch} />}
+        {tab === 'new-products'  && <NewProducts onOpen={handleOpen} activeBranch={activeBranch} />}
         {tab === 'settings'  && <Settings activeBranch={activeBranch} />}
       </main>
 

@@ -62,7 +62,8 @@ async function loadAllData() {
     is_promo: !!p.is_promo,
     min_stock: n(p.min_stock),
     effective_sell_price: p.effective_sell_price != null ? n(p.effective_sell_price) : null,
-    updated: '',
+    created_at: p.created_at || '',
+    updated_at: p.updated_at || '',
   }));
 
   // קטגוריות (לפי הקיימות בפועל)
