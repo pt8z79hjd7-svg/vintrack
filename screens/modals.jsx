@@ -296,6 +296,24 @@ const AddProductModal = ({ onClose }) => {
     supplier: '', mikado: 0, kohav: 0
   });
   const set = (k, v) => setForm({ ...form, [k]: v });
+  const [saving, setSaving] = React.useState(false);
+
+  const saveProduct = async () => {
+    if (!form.name || !form.sku) { alert('שם וברקוד הם שדות חובה'); return; }
+    setSaving(true);
+    const catLabel = (CATEGORIES.find((c) => c.id === form.cat) || {}).label || form.cat;
+    const { error } = await window.sb.from('products').insert({
+      name: form.name, barcode: String(form.sku), category: catLabel,
+      supplier: form.supplier || 'לא ידוע',
+      cost_price: Number(form.cost) || 0, sell_price: Number(form.price) || 0,
+      stock_mikado: Number(form.mikado) || 0, stock_kochav: Number(form.kohav) || 0,
+      is_active: true,
+    });
+    setSaving(false);
+    if (error) { alert('שמירה נכשלה: ' + error.message); return; }
+    alert('המוצר נוסף בהצלחה ✓ (יופיע אחרי רענון)');
+    onClose();
+  };
 
   return (
     <Modal
@@ -305,8 +323,8 @@ const AddProductModal = ({ onClose }) => {
       footer={
         <>
           <button className="btn" onClick={onClose}>ביטול</button>
-          <button className="btn btn-primary" onClick={onClose}>
-            <ICheck size={16} /> הוסף מוצר
+          <button className="btn btn-primary" onClick={saveProduct} disabled={saving}>
+            <ICheck size={16} /> {saving ? 'שומר…' : 'הוסף מוצר'}
           </button>
         </>
       }

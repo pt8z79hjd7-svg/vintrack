@@ -1,6 +1,43 @@
 // === Shared UI helpers ===
 const { useState, useEffect, useMemo, useRef } = React;
 
+// === useLiveData — מאזין ל-vintrack:data-updated ומכריח re-render כשהנתונים השתנו ===
+// כל קומפוננטה שצורכת window.PRODUCTS/MONTHLY/DAILY... צריכה להפעיל את ה-hook הזה
+// כדי להתעדכן אוטומטית אחרי refreshData (visibilitychange/interval/realtime/manual).
+function useLiveData() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const h = () => force((n) => n + 1);
+    window.addEventListener('vintrack:data-updated', h);
+    return () => window.removeEventListener('vintrack:data-updated', h);
+  }, []);
+}
+window.useLiveData = useLiveData;
+
+// === useLastUpdated — מחזיר Date של רענון אחרון (לסטטוס "עודכן לפני X דקות") ===
+function useLastUpdated() {
+  const [t, setT] = useState(Date.now());
+  useEffect(() => {
+    const h = () => setT(Date.now());
+    window.addEventListener('vintrack:data-updated', h);
+    return () => window.removeEventListener('vintrack:data-updated', h);
+  }, []);
+  return t;
+}
+window.useLastUpdated = useLastUpdated;
+
+// === relTime — "עכשיו" / "לפני X דק׳" / "לפני X שע׳" ===
+function relTime(ts) {
+  const d = Math.max(0, Date.now() - ts);
+  if (d < 30000) return 'עכשיו';
+  const m = Math.floor(d / 60000);
+  if (m < 1) return `לפני ${Math.floor(d / 1000)} שנ׳`;
+  if (m < 60) return `לפני ${m} דק׳`;
+  const h = Math.floor(m / 60);
+  return `לפני ${h} שע׳`;
+}
+window.relTime = relTime;
+
 const Card = ({ title, sub, action, children, pad = false }) => (
   <div className="card">
     {(title || action) && (

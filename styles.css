@@ -1,6 +1,8 @@
 /* === Inventory Management — Design Tokens === */
 @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
 :root {
   /* Accent (default: petrol/teal) */
   --accent: oklch(0.52 0.09 220);

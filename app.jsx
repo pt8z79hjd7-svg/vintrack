@@ -34,6 +34,16 @@ function App() {
   const [activeBranch, setActiveBranch] = useState('both');
   const [activeSupplier, setActiveSupplier] = useState(null); // for order builder
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  useLiveData();                                   // re-render אוטומטי בכל refreshData
+  const lastUpdated = useLastUpdated();            // לסטטוס "עודכן לפני…"
+  const [refreshing, setRefreshing] = useState(false);
+  const [, tickClock] = useState(0);
+  useEffect(() => { const id = setInterval(() => tickClock((n) => n + 1), 30000); return () => clearInterval(id); }, []);
+  const doRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try { await window.refreshData('manual'); } finally { setRefreshing(false); }
+  };
 
   // Apply tweaks
   useEffect(() => {
@@ -151,6 +161,20 @@ function App() {
             </button>
           </div>
           <div className="topbar-actions">
+            <span className="muted" title={`עודכן ב-${new Date(lastUpdated).toLocaleTimeString('he-IL')}`}
+                  style={{ fontSize: 12, marginInlineEnd: 6, whiteSpace: 'nowrap' }}>
+              {refreshing ? 'מעדכן…' : `עודכן ${relTime(lastUpdated)}`}
+            </span>
+            <button className="icon-btn" title="רענן עכשיו" onClick={doRefresh} disabled={refreshing}
+                    style={{ opacity: refreshing ? 0.5 : 1 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                   style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>
+                <polyline points="23 4 23 10 17 10" />
+                <polyline points="1 20 1 14 7 14" />
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+            </button>
             <button className="icon-btn" title="התראות">
               <IBell size={18} />
               <span className="dot" />

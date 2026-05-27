@@ -139,3 +139,59 @@ async function loadAllData() {
 }
 
 window.loadAllData = loadAllData;
+
+// ─── רענון אוטומטי: בכל חזרה לטאב + ברקע כל 90 שניות + Supabase realtime ───
+// כל אלה מעדכנים את window.PRODUCTS/MONTHLY/DAILY וכו'. הקומפוננטות
+// משתמשות בהם דרך גישה ישירה ל-window, אבל כדי לרענן UI גם בלי re-render
+// טבעי — אנחנו מפעילים אירוע 'vintrack:data-updated' שקומפוננטות יכולות להאזין.
+let _refreshing = false;
+async function refreshData(reason = 'manual') {
+  if (_refreshing) return;
+  _refreshing = true;
+  try {
+    await loadAllData();
+    window.dispatchEvent(new CustomEvent('vintrack:data-updated', { detail: { reason, at: Date.now() } }));
+    console.log('[VinTrack] רענון נתונים:', reason);
+  } catch (e) {
+    console.warn('[VinTrack] רענון נכשל:', e?.message);
+  } finally {
+    _refreshing = false;
+  }
+}
+window.refreshData = refreshData;
+
+// 1) חזרה לטאב = רענון (אם עברו לפחות 20 שניות מהטעינה האחרונה)
+let _lastLoadAt = Date.now();
+window.addEventListener('vintrack:data-updated', () => { _lastLoadAt = Date.now(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - _lastLoadAt > 20000) {
+    refreshData('visibilitychange');
+  }
+});
+// פוקוס לחלון (קליק חזרה מהדפדפן) — אותו דבר
+window.addEventListener('focus', () => {
+  if (Date.now() - _lastLoadAt > 20000) refreshData('focus');
+});
+
+// 2) רענון רקע כל 90 שניות (רק כשהטאב גלוי)
+setInterval(() => {
+  if (document.visibilityState === 'visible') refreshData('interval');
+}, 90000);
+
+// 3) Supabase realtime — אם הטבלאות משתנות בצד שרת, נקבל דחיפה ונרענן מיד
+function startRealtime() {
+  try {
+    if (!window.sb) return;
+    const tables = ['products', 'daily_summary', 'monthly_summary', 'supplier_inventory',
+                    'order_recommendations', 'transfers', 'import_deals'];
+    const ch = window.sb.channel('vintrack-live');
+    tables.forEach((t) => ch.on('postgres_changes', { event: '*', schema: 'public', table: t },
+                                () => refreshData('realtime:' + t)));
+    ch.subscribe();
+    window._vtChannel = ch;
+  } catch (e) { console.warn('realtime לא זמין:', e?.message); }
+}
+// מחכה ש-sb יהיה זמין
+const _rtTry = setInterval(() => {
+  if (window.sb) { clearInterval(_rtTry); startRealtime(); }
+}, 300);
