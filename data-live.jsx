@@ -149,12 +149,14 @@ let _refreshing = false;
 async function refreshData(reason = 'manual') {
   if (_refreshing) return;
   _refreshing = true;
+  window.dispatchEvent(new CustomEvent('vintrack:refresh-start', { detail: { reason, at: Date.now() } }));
   try {
     await loadAllData();
     window.dispatchEvent(new CustomEvent('vintrack:data-updated', { detail: { reason, at: Date.now() } }));
     console.log('[VinTrack] רענון נתונים:', reason);
   } catch (e) {
     console.warn('[VinTrack] רענון נכשל:', e?.message);
+    window.dispatchEvent(new CustomEvent('vintrack:refresh-error', { detail: { reason, message: e?.message || 'unknown' } }));
   } finally {
     _refreshing = false;
   }

@@ -31,8 +31,14 @@ const ProductDetailModal = ({ product, onClose }) => {
       .update({ sell_price: price, cost_price: cost, supplier })
       .eq('barcode', product.sku);
     setSaving(false);
-    if (error) { alert('שמירה נכשלה: ' + error.message); return; }
+    if (error) {
+      (window.toast?.error || alert)('שמירה נכשלה: ' + error.message);
+      return;
+    }
     setSaved(true); setEditing(false);
+    (window.toast?.success || alert)('✓ נשמר. יעבור לצינור עד 5 דק׳');
+    // טריגר רענון מיידי כדי שהמספרים יתעדכנו (במקום להמתין לrealtime)
+    setTimeout(() => window.refreshData && window.refreshData('post-save'), 500);
   };
 
   const mainStock = product.stock.mikado + product.stock.kohav;
@@ -299,7 +305,10 @@ const AddProductModal = ({ onClose }) => {
   const [saving, setSaving] = React.useState(false);
 
   const saveProduct = async () => {
-    if (!form.name || !form.sku) { alert('שם וברקוד הם שדות חובה'); return; }
+    if (!form.name || !form.sku) {
+      (window.toast?.warn || alert)('שם וברקוד הם שדות חובה');
+      return;
+    }
     setSaving(true);
     const catLabel = (CATEGORIES.find((c) => c.id === form.cat) || {}).label || form.cat;
     const { error } = await window.sb.from('products').insert({
@@ -310,8 +319,12 @@ const AddProductModal = ({ onClose }) => {
       is_active: true,
     });
     setSaving(false);
-    if (error) { alert('שמירה נכשלה: ' + error.message); return; }
-    alert('המוצר נוסף בהצלחה ✓ (יופיע אחרי רענון)');
+    if (error) {
+      (window.toast?.error || alert)('שמירה נכשלה: ' + error.message);
+      return;
+    }
+    (window.toast?.success || alert)('✓ המוצר נוסף');
+    setTimeout(() => window.refreshData && window.refreshData('post-add'), 500);
     onClose();
   };
 
