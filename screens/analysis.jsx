@@ -1,5 +1,6 @@
 // === ניתוח וחריגות — כמו סיכום הטלגרם היומי ===
 const Analysis = ({ activeBranch = 'both' }) => {
+  useLiveData();   // re-render אחרי refreshData
   const P = window.PRODUCTS || [];
   const stk = (p) => activeBranch === 'mikado' ? p.stock.mikado
     : activeBranch === 'kohav' ? p.stock.kohav : p.total;

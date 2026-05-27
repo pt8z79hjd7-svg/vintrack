@@ -3,6 +3,7 @@
 const PAGE_SIZE = 12;
 
 const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
+  useLiveData();   // re-render אחרי refreshData
   const [cat, setCat] = useState('all');
   const [sup, setSup] = useState('all');
   const [stock, setStock] = useState('all');

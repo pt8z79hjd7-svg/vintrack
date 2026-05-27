@@ -1,5 +1,6 @@
 // === מכירות / מובילים — 30 המובילים ב-3 חתכים ===
 const Sales = ({ activeBranch = 'both' }) => {
+  useLiveData();   // re-render אחרי refreshData
   const P = (window.PRODUCTS || []).filter((p) => p.total > 0 || (p.weekly || 0) > 0);
   const ppu = (p) => (p.price || 0) - (p.cost || 0);        // רווח ליחידה (לא מדויק למע"מ — אינדיקציה)
   const wprofit = (p) => (p.weekly || 0) * ppu(p);           // רווח שבועי משוער ₪

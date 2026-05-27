@@ -2,6 +2,7 @@
 
 // === Daily — בחירת תאריך מביאה את נתוני אותו יום ===
 const Daily = ({ activeBranch = 'both' }) => {
+  useLiveData();   // re-render אחרי refreshData
   const byDate = window.DAILY_BY_DATE || {};
   const dates = Object.keys(byDate).sort().reverse();
   const todayISO = new Date().toISOString().slice(0, 10);
@@ -122,6 +123,7 @@ const Daily = ({ activeBranch = 'both' }) => {
 
 // === Monthly — בחירת טווח חודשים ===
 const Monthly = ({ activeBranch = 'both' }) => {
+  useLiveData();   // re-render אחרי refreshData
   const all = window.MONTHLY || [];
   const [from, setFrom] = useState(0);
   const [to, setTo] = useState(Math.max(0, all.length - 1));

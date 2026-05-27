@@ -5,6 +5,7 @@ const fmtCurrency = (v) => `₪${v.toLocaleString('he-IL', { maximumFractionDigi
 const fmtCompact = (v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : `${v}`;
 
 const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
+  useLiveData();   // re-render אחרי refreshData (manual/interval/realtime)
   const _cur = MONTHLY[MONTHLY.length - 1] || { total: 0, mikado: 0, kohav: 0, margin: 0 };
   const _prev = MONTHLY[MONTHLY.length - 2] || _cur;
   // לפי בורר הסניף: 'both' = total, 'mikado' / 'kohav' = רק אותו סניף
