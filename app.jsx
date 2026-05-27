@@ -77,124 +77,98 @@ function App() {
     settings:      'הגדרות',
   };
 
+  // חישוב badges פעם אחת
+  const ordersBadge = ORDERS.filter(o => o.status !== 'completed').length;
+  const transfersBadge = TRANSFERS.filter(x => x.status === 'pending').length;
+  const negBadge = PRODUCTS.filter(p => p.stock.mikado < 0 || p.stock.kohav < 0).length || undefined;
+  const newProdBadge = PRODUCTS.filter(p => !p.cost || p.cost <= 0 || !p.price || p.price <= 0).length;
+  const getBadge = (id) => {
+    if (id === 'orders') return ordersBadge;
+    if (id === 'transfers') return transfersBadge;
+    if (id === 'inventory') return negBadge;
+    if (id === 'new-products') return newProdBadge;
+    return undefined;
+  };
+
   return (
-    <div className="app-shell">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="brand">
+    <div className="app-shell app-shell-v2">
+      {/* ─── Header: brand + search + actions ─── */}
+      <header className="topbar-v2">
+        <div className="topbar-brand">
           <div className="brand-mark"><BrandMark /></div>
-          <div className="brand-text">
-            <div className="brand-name">VinTrack</div>
-            <div className="brand-sub">מיקדו · כוכב הצפון</div>
-          </div>
+          <span className="brand-name">VinTrack</span>
         </div>
 
-        {/* Branch switcher */}
-        <div className="branch-switch">
+        <div className="branch-switch branch-switch-top">
           <button className={`branch-opt ${activeBranch === 'both' ? 'active' : ''}`}
-                  onClick={() => setActiveBranch('both')}>
-            שניהם
-          </button>
+                  onClick={() => setActiveBranch('both')}>שניהם</button>
           <button className={`branch-opt ${activeBranch === 'mikado' ? 'active' : ''}`}
                   onClick={() => setActiveBranch('mikado')}>
-            <span className="branch-dot" style={{ background: BRANCHES[0].color }} />
-            מיקדו
+            <span className="branch-dot" style={{ background: BRANCHES[0].color }} />מיקדו
           </button>
           <button className={`branch-opt ${activeBranch === 'kohav' ? 'active' : ''}`}
                   onClick={() => setActiveBranch('kohav')}>
-            <span className="branch-dot" style={{ background: BRANCHES[1].color }} />
-            כוכב
+            <span className="branch-dot" style={{ background: BRANCHES[1].color }} />כוכב
           </button>
         </div>
 
-        <div className="nav-group-label">ניווט ראשי</div>
-        {NAV_ITEMS.map(({ id, label, Icon }) => {
-          let badge;
-          if (id === 'orders')    badge = ORDERS.filter(o => o.status !== 'completed').length;
-          if (id === 'transfers') badge = TRANSFERS.filter(x => x.status === 'pending').length;
-          if (id === 'inventory') {
-            const neg = PRODUCTS.filter(p => p.stock.mikado < 0 || p.stock.kohav < 0).length;
-            badge = neg || undefined;
-          }
-          return (
-            <button key={id}
-                    className={`nav-item ${tab === id ? 'active' : ''}`}
-                    onClick={() => handleNav(id)}>
-              <Icon className="icon" size={18} />
-              <span>{label}</span>
-              {badge ? <span className="badge">{badge}</span> : null}
-            </button>
-          );
-        })}
-
-        <div className="nav-group-label">דוחות</div>
-        {NAV_SECONDARY.map(({ id, label, Icon }) => {
-          let badge;
-          if (id === 'new-products') {
-            badge = PRODUCTS.filter(p => !p.cost || p.cost <= 0 || !p.price || p.price <= 0).length;
-          }
-          return (
-            <button key={id}
-                    className={`nav-item ${tab === id ? 'active' : ''}`}
-                    onClick={() => handleNav(id)}>
-              <Icon className="icon" size={18} />
-              <span>{label}</span>
-              {badge ? <span className="badge warn">{badge}</span> : null}
-            </button>
-          );
-        })}
-
-        <div className="sidebar-footer">
-          <div className="avatar">יא</div>
-          <div className="user-info">
-            <span className="user-name">יעל אבני</span>
-            <span className="user-role">מנהלת</span>
-          </div>
-          <button className="icon-btn" style={{ marginInlineStart: 'auto', width: 28, height: 28 }}>
-            <ISettings size={14} />
+        <div className="search-bar search-with-scan">
+          <ISearch size={15} />
+          <input placeholder="חיפוש מוצר, ברקוד, ספק…" />
+          <button className="scan-trigger" onClick={() => setScannerOpen(true)} title="סריקה במצלמה">
+            <ICamera size={16} />
           </button>
         </div>
-      </aside>
 
-      {/* Main area */}
-      <main className="main" data-screen-label={titles[tab]}>
-        <div className="topbar">
-          <div>
-            <div className="crumbs">VinTrack · {titles[tab]}</div>
-          </div>
-          <div className="search-bar search-with-scan">
-            <ISearch size={15} />
-            <input placeholder="חיפוש מוצר, ברקוד, ספק…" />
-            <button className="scan-trigger"
-                    onClick={() => setScannerOpen(true)}
-                    title="סריקה במצלמה">
-              <ICamera size={16} />
-            </button>
-          </div>
-          <div className="topbar-actions">
-            <span className="muted" title={`עודכן ב-${new Date(lastUpdated).toLocaleTimeString('he-IL')}`}
-                  style={{ fontSize: 12, marginInlineEnd: 6, whiteSpace: 'nowrap' }}>
-              {refreshing ? 'מעדכן…' : `עודכן ${relTime(lastUpdated)}`}
-            </span>
-            <button className="icon-btn" title="רענן עכשיו" onClick={doRefresh} disabled={refreshing}
-                    style={{ opacity: refreshing ? 0.5 : 1 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                   style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>
-                <polyline points="23 4 23 10 17 10" />
-                <polyline points="1 20 1 14 7 14" />
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-              </svg>
-            </button>
-            <button className="icon-btn" title="התראות">
-              <IBell size={18} />
-              <span className="dot" />
-            </button>
-            <button className="icon-btn" title="הגדרות">
-              <ISettings size={18} />
-            </button>
-          </div>
+        <div className="topbar-actions">
+          <span className="muted" title={`עודכן ב-${new Date(lastUpdated).toLocaleTimeString('he-IL')}`}
+                style={{ fontSize: 12, marginInlineEnd: 6, whiteSpace: 'nowrap' }}>
+            {refreshing ? 'מעדכן…' : `עודכן ${relTime(lastUpdated)}`}
+          </span>
+          <button className="icon-btn" title="רענן עכשיו" onClick={doRefresh} disabled={refreshing}
+                  style={{ opacity: refreshing ? 0.5 : 1 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                 style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>
+              <polyline points="23 4 23 10 17 10" />
+              <polyline points="1 20 1 14 7 14" />
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+          </button>
+          <button className="icon-btn" title="התראות"><IBell size={18} /><span className="dot" /></button>
+          <button className="icon-btn" title="הגדרות" onClick={() => handleNav('settings')}><ISettings size={18} /></button>
         </div>
+      </header>
+
+      {/* ─── Nav strip: primary + secondary tabs ─── */}
+      <nav className="nav-strip">
+        <div className="nav-strip-row">
+          {NAV_ITEMS.map(({ id, label, Icon }) => {
+            const badge = getBadge(id);
+            return (
+              <button key={id} className={`nav-tab ${tab === id ? 'active' : ''}`} onClick={() => handleNav(id)}>
+                <Icon className="icon" size={16} />
+                <span>{label}</span>
+                {badge ? <span className="badge">{badge}</span> : null}
+              </button>
+            );
+          })}
+          <span className="nav-divider" />
+          {NAV_SECONDARY.map(({ id, label, Icon }) => {
+            const badge = getBadge(id);
+            return (
+              <button key={id} className={`nav-tab nav-tab-sec ${tab === id ? 'active' : ''}`} onClick={() => handleNav(id)}>
+                <Icon className="icon" size={16} />
+                <span>{label}</span>
+                {badge ? <span className="badge warn">{badge}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* ─── Content area ─── */}
+      <main className="main-v2" data-screen-label={titles[tab]}>
 
         {tab === 'dashboard' && <Dashboard onNav={handleNav} onOpen={handleOpen} activeBranch={activeBranch} />}
         {tab === 'inventory' && <Inventory onOpen={handleOpen} onOpenScan={() => setScannerOpen(true)} activeBranch={activeBranch} />}
@@ -212,6 +186,20 @@ function App() {
         {tab === 'new-products'  && <NewProducts onOpen={handleOpen} activeBranch={activeBranch} />}
         {tab === 'settings'  && <Settings activeBranch={activeBranch} />}
       </main>
+
+      {/* ─── Bottom nav (mobile only — secondary tabs) ─── */}
+      <nav className="nav-bottom">
+        {NAV_SECONDARY.map(({ id, label, Icon }) => {
+          const badge = getBadge(id);
+          return (
+            <button key={id} className={`nav-bottom-item ${tab === id ? 'active' : ''}`} onClick={() => handleNav(id)}>
+              <Icon size={18} />
+              <span>{label}</span>
+              {badge ? <span className="badge">{badge}</span> : null}
+            </button>
+          );
+        })}
+      </nav>
 
       {/* Modals */}
       {modal?.kind === 'add'    && <AddProductModal onClose={closeModal} />}
