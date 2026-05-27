@@ -192,6 +192,9 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                     <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
                       {fmtCurrency(dailyTotal)}
                     </div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                      כולל מע״מ: <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{fmtCurrency(Math.round(dailyTotal * 1.18))}</span>
+                    </div>
                   </div>
                   {avg7 > 0 && (
                     <div style={{ textAlign: 'end' }}>
@@ -257,11 +260,17 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                 <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
                   {fmtCurrency(monthTotal)}
                 </div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                  כולל מע״מ: <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{fmtCurrency(Math.round(monthTotal * 1.18))}</span>
+                </div>
               </div>
               <div style={{ textAlign: 'end' }}>
                 <div className="muted" style={{ fontSize: 11 }}>קצב חודשי משוער</div>
                 <div style={{ fontWeight: 700, color: 'var(--ink-2)', fontVariantNumeric: 'tabular-nums' }}>
                   {fmtCurrency(Math.round(projectedMonth))}
+                </div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                  כולל מע״מ: {fmtCurrency(Math.round(projectedMonth * 1.18))}
                 </div>
               </div>
             </div>

@@ -72,7 +72,10 @@ const Daily = ({ activeBranch = 'both' }) => {
             {activeBranch === 'both' ? 'מחזור כולל' : (activeBranch === 'mikado' ? 'מחזור מיקדו' : 'מחזור כוכב')} (ללא מע״מ)
           </div>
           <div className="kpi-value">{fmtCurrency(d.total)}</div>
-          <div className="kpi-foot">{d.salesLines} שורות מכירה</div>
+          <div className="kpi-foot">
+            <span style={{ color: 'var(--ink-2)' }}>כולל מע״מ: ₪{Math.round(d.total * 1.18).toLocaleString('he-IL')}</span>
+            <span className="muted"> · {d.salesLines} שורות</span>
+          </div>
         </div>
         {(activeBranch === 'both' || activeBranch === 'mikado') && (
           <div className="kpi">
