@@ -2,12 +2,16 @@
 const Sales = ({ activeBranch = 'both' }) => {
   useLiveData();   // re-render אחרי refreshData
   const P = (window.PRODUCTS || []).filter((p) => p.total > 0 || (p.weekly || 0) > 0);
-  const ppu = (p) => (p.price || 0) - (p.cost || 0);        // רווח ליחידה (לא מדויק למע"מ — אינדיקציה)
+  // מחיר אפקטיבי = ממוצע משוקלל 30 ימים (כולל מבצעים). fallback למחיר רשמי
+  const effPrice = (p) => p.effective_sell_price || p.price || 0;
+  const hasEff = (p) => p.effective_sell_price != null && Math.abs(p.effective_sell_price - (p.price || 0)) > 0.5;
+  const ppu = (p) => effPrice(p) - (p.cost || 0);            // רווח ליחידה — לפי מחיר אפקטיבי
+  const effMargin = (p) => { const ep = effPrice(p); return ep > 0 ? ((ep - (p.cost || 0)) / ep) * 100 : 0; };
   const wprofit = (p) => (p.weekly || 0) * ppu(p);           // רווח שבועי משוער ₪
 
   const [view, setView] = useState('money');
   const lists = {
-    margin:  [...P].sort((a, b) => (b.margin || 0) - (a.margin || 0)).slice(0, 30),
+    margin:  [...P].sort((a, b) => effMargin(b) - effMargin(a)).slice(0, 30),
     money:   [...P].sort((a, b) => wprofit(b) - wprofit(a)).slice(0, 30),
     sellers: [...P].sort((a, b) => (b.weekly || 0) - (a.weekly || 0)).slice(0, 30),
   };
@@ -26,23 +30,36 @@ const Sales = ({ activeBranch = 'both' }) => {
       <table className="tbl">
         <thead><tr>
           <th style={{ width: 28 }}>#</th><th>מוצר</th><th>ספק</th>
-          <th style={te}>עלות</th><th style={te}>מחיר</th><th style={te}>מרווח</th>
-          <th style={te}>קצב/שב׳</th><th style={te}>רווח/שב׳</th>
+          <th style={te}>עלות</th><th style={te}>מחיר רשמי</th><th style={te}>מחיר בפועל</th>
+          <th style={te}>מרווח</th><th style={te}>קצב/שב׳</th><th style={te}>רווח/שב׳</th>
         </tr></thead>
         <tbody>
-          {items.map((p, i) => (
-            <tr key={p.id}>
-              <td style={{ color: 'var(--ink-3)', fontWeight: 700 }}>{i + 1}</td>
-              <td style={{ fontWeight: 600 }}>{p.name}{p.is_promo && <Badge tone="accent" style={{ marginInlineStart: 6 }}>מבצע</Badge>}</td>
-              <td>{p.supplier}</td>
-              <td style={te}>₪{(p.cost || 0).toFixed(0)}</td>
-              <td style={te}>₪{(p.price || 0).toFixed(0)}</td>
-              <td style={te}><span className={`badge ${(p.margin || 0) >= 25 ? 'ok' : 'warn'}`}>{(p.margin || 0).toFixed(0)}%</span></td>
-              <td style={te}>{(p.weekly || 0).toFixed(1)}</td>
-              <td style={{ ...te, color: 'var(--ok)', fontWeight: 600 }}>₪{Math.round(wprofit(p))}</td>
-            </tr>
-          ))}
-          {!items.length && <tr><td colSpan="8" style={{ textAlign: 'center', padding: 24, color: 'var(--ink-3)' }}>—</td></tr>}
+          {items.map((p, i) => {
+            const ep = effPrice(p);
+            const he = hasEff(p);
+            const em = effMargin(p);
+            return (
+              <tr key={p.id}>
+                <td style={{ color: 'var(--ink-3)', fontWeight: 700 }}>{i + 1}</td>
+                <td style={{ fontWeight: 600 }}>
+                  {p.name}
+                  {p.is_promo && <span className="badge accent" style={{ marginInlineStart: 6, fontSize: 10 }}>מבצע</span>}
+                </td>
+                <td>{p.supplier}</td>
+                <td style={te}>₪{(p.cost || 0).toFixed(0)}</td>
+                <td style={{ ...te, color: he ? 'var(--ink-3)' : '', textDecoration: he ? 'line-through' : 'none', fontSize: he ? 12 : 14 }}>
+                  ₪{(p.price || 0).toFixed(0)}
+                </td>
+                <td style={{ ...te, fontWeight: he ? 700 : 400, color: he ? 'var(--accent-strong)' : '' }}>
+                  {he ? `₪${ep.toFixed(0)}` : '—'}
+                </td>
+                <td style={te}><span className={`badge ${em >= 25 ? 'ok' : 'warn'}`}>{em.toFixed(0)}%</span></td>
+                <td style={te}>{(p.weekly || 0).toFixed(1)}</td>
+                <td style={{ ...te, color: 'var(--ok)', fontWeight: 600 }}>₪{Math.round(wprofit(p))}</td>
+              </tr>
+            );
+          })}
+          {!items.length && <tr><td colSpan="9" style={{ textAlign: 'center', padding: 24, color: 'var(--ink-3)' }}>—</td></tr>}
         </tbody>
       </table>
     </div>
@@ -74,6 +91,18 @@ const Sales = ({ activeBranch = 'both' }) => {
 
       <Card title="🏷️ פריטים במבצע" sub={`${promos.length} פריטים מסומנים כמבצע`}>
         <Table items={promos} />
+        {promos.length > 0 && (() => {
+          const withEff = promos.filter(p => hasEff(p));
+          const avgDiscount = withEff.length ? withEff.reduce((s, p) => s + (1 - effPrice(p) / (p.price || 1)) * 100, 0) / withEff.length : 0;
+          return withEff.length > 0 ? (
+            <div style={{ padding: '12px 18px', borderTop: '1px solid var(--line)', fontSize: 13 }}>
+              <span className="muted">{withEff.length} פריטים עם מחיר אפקטיבי שונה מהרשמי</span>
+              <span style={{ marginInlineStart: 12, fontWeight: 600 }}>
+                הנחה ממוצעת: {avgDiscount.toFixed(1)}%
+              </span>
+            </div>
+          ) : null;
+        })()}
       </Card>
     </div>
   );
