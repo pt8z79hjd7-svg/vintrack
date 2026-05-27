@@ -1561,13 +1561,13 @@ button:focus-visible, .input:focus-visible, .select:focus-visible {
 /* ═══════════════════════════════════════════
    V2 Navigation — top strip + bottom mobile
    ═══════════════════════════════════════════ */
-.app-shell-v2 {
+.app-shell.app-shell-v2 {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  grid-template-columns: none;
+  grid-template-columns: unset;
 }
-.app-shell-v2 .sidebar { display: none; }
+.app-shell.app-shell-v2 .sidebar { display: none; }
 
 /* ─── Top bar (brand + search + actions) ─── */
 .topbar-v2 {
