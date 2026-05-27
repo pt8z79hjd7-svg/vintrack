@@ -74,11 +74,11 @@ const Daily = ({ activeBranch = 'both' }) => {
       <div className="kpi-grid">
         <div className="kpi">
           <div className="kpi-label"><span className="kpi-icon"><ICoin size={16} /></span>
-            {activeBranch === 'both' ? 'מחזור כולל' : (activeBranch === 'mikado' ? 'מחזור מיקדו' : 'מחזור כוכב')} (ללא מע״מ)
+            {activeBranch === 'both' ? 'מחזור כולל' : (activeBranch === 'mikado' ? 'מחזור מיקדו' : 'מחזור כוכב')} (כולל מע״מ)
           </div>
-          <div className="kpi-value">{fmtCurrency(d.total)}</div>
+          <div className="kpi-value">{fmtCurrency(Math.round(d.total * 1.18))}</div>
           <div className="kpi-foot">
-            <span style={{ color: 'var(--ink-2)' }}>כולל מע״מ: ₪{Math.round(d.total * 1.18).toLocaleString('he-IL')}</span>
+            <span style={{ color: 'var(--ink-2)' }}>ללא מע״מ: ₪{d.total.toLocaleString('he-IL')}</span>
             <span className="muted"> · {d.salesLines} שורות</span>
           </div>
         </div>
@@ -88,7 +88,7 @@ const Daily = ({ activeBranch = 'both' }) => {
               <span className="kpi-icon" style={{ background: 'color-mix(in oklch, ' + BRANCHES[0].color + ' 18%, transparent)', color: BRANCHES[0].color }}><IBox size={16} /></span>
               מיקדו
             </div>
-            <div className="kpi-value">{fmtCurrency(raw.mikado)}</div>
+            <div className="kpi-value">{fmtCurrency(Math.round(raw.mikado * 1.18))}</div>
             <div className="kpi-foot">{pct(raw.mikado)}% מהמחזור</div>
           </div>
         )}
@@ -98,7 +98,7 @@ const Daily = ({ activeBranch = 'both' }) => {
               <span className="kpi-icon" style={{ background: 'color-mix(in oklch, ' + BRANCHES[1].color + ' 18%, transparent)', color: BRANCHES[1].color }}><IBox size={16} /></span>
               כוכב הצפון
             </div>
-            <div className="kpi-value">{fmtCurrency(raw.kohav)}</div>
+            <div className="kpi-value">{fmtCurrency(Math.round(raw.kohav * 1.18))}</div>
             <div className="kpi-foot">{pct(raw.kohav)}% מהמחזור</div>
           </div>
         )}
@@ -164,7 +164,7 @@ const Monthly = ({ activeBranch = 'both' }) => {
         </div>
       </div>
 
-      <Card title={`מחזור חודשי${activeBranch === 'both' ? ' לפי סניף' : (activeBranch === 'mikado' ? ' — מיקדו בלבד' : ' — כוכב הצפון בלבד')}`} sub="ללא מע״מ · ₪"
+      <Card title={`מחזור חודשי${activeBranch === 'both' ? ' לפי סניף' : (activeBranch === 'mikado' ? ' — מיקדו בלבד' : ' — כוכב הצפון בלבד')}`} sub="כולל מע״מ · ₪"
         action={
           <div className="row" style={{ gap: 14, fontSize: 12 }}>
             {(activeBranch === 'both' || activeBranch === 'mikado') && (
@@ -177,7 +177,7 @@ const Monthly = ({ activeBranch = 'both' }) => {
         }>
         <div style={{ padding: 16 }}>
           {data.length ? (
-            <GroupedBarChart data={data} keys={keys} colors={colors} fmt={(v) => fmtCompact(Math.round(v))} height={260} />
+            <GroupedBarChart data={data} keys={keys} colors={colors} fmt={(v) => fmtCompact(Math.round(v * 1.18))} height={260} />
           ) : <div style={{ padding: 30, textAlign: 'center', color: 'var(--ink-3)' }}>אין נתונים בטווח.</div>}
         </div>
       </Card>
@@ -205,14 +205,14 @@ const Monthly = ({ activeBranch = 'both' }) => {
                 return (
                   <tr key={m.m} style={m.current ? { background: 'var(--accent-soft)' } : {}}>
                     <td style={{ fontWeight: 700 }}>{m.m}{m.current && <Badge tone="accent" style={{ marginInlineStart: 6 }}>נוכחי</Badge>}</td>
-                    <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>₪{m.total.toLocaleString('he-IL')}</td>
-                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{m.mikado.toLocaleString('he-IL')}</td>
-                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{m.kohav.toLocaleString('he-IL')}</td>
+                    <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.total * 1.18).toLocaleString('he-IL')}</td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.mikado * 1.18).toLocaleString('he-IL')}</td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.kohav * 1.18).toLocaleString('he-IL')}</td>
                     <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>₪{m.profit.toLocaleString('he-IL')}</td>
                     <td style={{ textAlign: 'end' }}><span className={`badge ${marginGood ? 'ok' : 'warn'}`}>{m.margin.toFixed(1)}%</span></td>
                     <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{m.days}</td>
                     <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', color: 'var(--ink-3)' }}>₪{m.extra.toLocaleString('he-IL')}</td>
-                    <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--accent-strong)' }}>₪{total.toLocaleString('he-IL')}</td>
+                    <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--accent-strong)' }}>₪{Math.round(total * 1.18).toLocaleString('he-IL')}</td>
                   </tr>
                 );
               })}

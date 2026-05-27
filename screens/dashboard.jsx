@@ -1,5 +1,6 @@
 // === Dashboard — wine store with 2 branches ===
 const TARGETS = { revenue: 416667, margin: 25 };
+const VAT = 1.18;  // כל המחזורים מוצגים כולל מע"מ — כמו ב-CashOnTab
 
 const fmtCurrency = (v) => `₪${v.toLocaleString('he-IL', { maximumFractionDigits: 0 })}`;
 const fmtCompact = (v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : `${v}`;
@@ -15,7 +16,9 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
   const current = { ..._cur, total: branchVal(_cur) };
   const prev = { ..._prev, total: branchVal(_prev) };
 
-  const revenueOK = current.total >= TARGETS.revenue * (activeBranch === 'both' ? 1 : 0.5);
+  const revenueInclVat = Math.round(current.total * VAT);
+  const targetInclVat = Math.round(TARGETS.revenue * VAT * (activeBranch === 'both' ? 1 : 0.5));
+  const revenueOK = revenueInclVat >= targetInclVat;
   const marginOK = current.margin >= TARGETS.margin;
 
   const openOrders = ORDERS.filter(o => o.status !== 'completed').length;
@@ -107,19 +110,19 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         <button className={`kpi kpi-clickable ${revenueOK ? 'kpi-ok' : ''}`} onClick={() => onNav('monthly')}>
           <div className="kpi-label">
             <span className={`kpi-icon ${revenueOK ? 'ok' : ''}`}><ICoin size={16} /></span>
-            מחזור החודש
+            מחזור החודש <span className="muted" style={{fontSize:11}}>(כולל מע"מ)</span>
           </div>
-          <div className="kpi-value">{fmtCurrency(current.total)}</div>
+          <div className="kpi-value">{fmtCurrency(revenueInclVat)}</div>
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <span className={`kpi-delta ${revDelta < 0 ? 'neg' : ''}`}>
               {revDelta >= 0 ? <IArrowUp size={12} /> : <IArrowDown size={12} />}
               {Math.abs(revDelta).toFixed(1)}%
             </span>
-            <span className="kpi-foot">יעד {fmtCurrency(TARGETS.revenue)}</span>
+            <span className="kpi-foot">יעד {fmtCurrency(targetInclVat)}</span>
           </div>
           <div className="kpi-track">
             <div className="kpi-track-fill" style={{
-              width: `${Math.min(100, (current.total / TARGETS.revenue) * 100)}%`,
+              width: `${Math.min(100, (revenueInclVat / targetInclVat) * 100)}%`,
               background: revenueOK ? 'var(--ok)' : 'var(--warn)'
             }} />
           </div>
@@ -203,12 +206,12 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
               <>
                 <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
                   <div>
-                    <div className="muted" style={{ fontSize: 11 }}>מחזור (ללא מע״מ)</div>
+                    <div className="muted" style={{ fontSize: 11 }}>מחזור (כולל מע״מ)</div>
                     <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
-                      {fmtCurrency(dailyTotal)}
+                      {fmtCurrency(Math.round(dailyTotal * VAT))}
                     </div>
                     <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                      כולל מע״מ: <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{fmtCurrency(Math.round(dailyTotal * 1.18))}</span>
+                      ללא מע״מ: <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{fmtCurrency(dailyTotal)}</span>
                     </div>
                   </div>
                   {avg7 > 0 && (
@@ -229,7 +232,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                         <span className="branch-dot" style={{ background: BRANCHES[0].color }} />
                         <span className="muted" style={{ fontSize: 12 }}>מיקדו</span>
                       </div>
-                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(dailyRaw.mikado)}</div>
+                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(dailyRaw.mikado * VAT))}</div>
                     </div>
                   )}
                   {(activeBranch === 'both' || activeBranch === 'kohav') && (
@@ -238,7 +241,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                         <span className="branch-dot" style={{ background: BRANCHES[1].color }} />
                         <span className="muted" style={{ fontSize: 12 }}>כוכב הצפון</span>
                       </div>
-                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(dailyRaw.kohav)}</div>
+                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(dailyRaw.kohav * VAT))}</div>
                     </div>
                   )}
                 </div>
@@ -271,21 +274,21 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
           <div style={{ padding: 18 }}>
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
               <div>
-                <div className="muted" style={{ fontSize: 11 }}>מחזור עד עכשיו (ללא מע״מ)</div>
+                <div className="muted" style={{ fontSize: 11 }}>מחזור עד עכשיו (כולל מע״מ)</div>
                 <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
-                  {fmtCurrency(monthTotal)}
+                  {fmtCurrency(Math.round(monthTotal * VAT))}
                 </div>
                 <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                  כולל מע״מ: <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{fmtCurrency(Math.round(monthTotal * 1.18))}</span>
+                  ללא מע״מ: <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{fmtCurrency(monthTotal)}</span>
                 </div>
               </div>
               <div style={{ textAlign: 'end' }}>
                 <div className="muted" style={{ fontSize: 11 }}>קצב חודשי משוער</div>
                 <div style={{ fontWeight: 700, color: 'var(--ink-2)', fontVariantNumeric: 'tabular-nums' }}>
-                  {fmtCurrency(Math.round(projectedMonth))}
+                  {fmtCurrency(Math.round(projectedMonth * VAT))}
                 </div>
                 <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                  כולל מע״מ: {fmtCurrency(Math.round(projectedMonth * 1.18))}
+                  ללא מע״מ: {fmtCurrency(Math.round(projectedMonth))}
                 </div>
               </div>
             </div>
@@ -296,7 +299,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                     <span className="branch-dot" style={{ background: BRANCHES[0].color }} />
                     <span className="muted" style={{ fontSize: 12 }}>מיקדו</span>
                   </div>
-                  <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(monthRaw.mikado)}</div>
+                  <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(monthRaw.mikado * VAT))}</div>
                 </div>
               )}
               {(activeBranch === 'both' || activeBranch === 'kohav') && (
@@ -305,7 +308,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                     <span className="branch-dot" style={{ background: BRANCHES[1].color }} />
                     <span className="muted" style={{ fontSize: 12 }}>כוכב הצפון</span>
                   </div>
-                  <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(monthRaw.kohav)}</div>
+                  <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(monthRaw.kohav * VAT))}</div>
                 </div>
               )}
             </div>
@@ -330,7 +333,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14 }}>
         <Card
           title="מחזור חודשי · 6 חודשים אחרונים"
-          sub="מפוצל לפי סניף · ללא מע״מ"
+          sub="מפוצל לפי סניף · כולל מע״מ"
           action={
             <div className="row" style={{ gap: 14, fontSize: 12 }}>
               <span className="row" style={{ gap: 6 }}>
@@ -349,12 +352,12 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
               data={last6}
               keys={['mikado', 'kohav']}
               colors={[BRANCHES[0].color, BRANCHES[1].color]}
-              fmt={(v) => fmtCompact(Math.round(v))}
+              fmt={(v) => fmtCompact(Math.round(v * VAT))}
             />
           </div>
         </Card>
 
-        <Card title="חלוקת מחזור · חודש זה" sub={fmtCurrency(current.total)}>
+        <Card title="חלוקת מחזור · חודש זה" sub={fmtCurrency(revenueInclVat)}>
           <div style={{ padding: 22, display: 'flex', alignItems: 'center', gap: 18 }}>
             <div style={{ position: 'relative' }}>
               <PieSplit segments={[
@@ -385,7 +388,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                       <span style={{ color: 'var(--ink-2)' }}>{n}</span>
                     </div>
                     <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                      {fmtCurrency(v)}
+                      {fmtCurrency(Math.round(v * VAT))}
                     </span>
                   </div>
                 </div>
