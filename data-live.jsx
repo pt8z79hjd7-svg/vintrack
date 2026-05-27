@@ -21,11 +21,12 @@ Object.assign(window, {
   MONTHLY: [], DAILY_SAMPLE: {}, DAILY_BY_DATE: {}, DAILY_DETAILS: {},
   ORDERS: [], TRANSFERS: [], PROMOTIONS: [],
   ACTIVITY: [], INVENTORY_VALUE_BY_MONTH: [], PAST_ORDERS: {}, LAST_RECEIVED: {},
+  APPROVED_PRODUCTS: new Set(),
 });
 
 async function loadAllData() {
   const sb = window.sb;
-  const [prodR, monR, dayR, invR, dealR, transR, ordR, detR] = await Promise.all([
+  const [prodR, monR, dayR, invR, dealR, transR, ordR, detR, appR] = await Promise.all([
     sb.from('products').select('*').limit(5000),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
@@ -34,6 +35,7 @@ async function loadAllData() {
     sb.from('transfers').select('*'),
     sb.from('order_recommendations').select('*'),
     sb.from('daily_details').select('*').order('summary_date', { ascending: false }).limit(60),
+    sb.from('product_approvals').select('barcode'),
   ]);
   const products = prodR.data || [];
 
@@ -154,10 +156,13 @@ async function loadAllData() {
     };
   });
 
+  // אישורי מוצרים — Set של ברקודים שאושרו (טבלה נפרדת, לא מושפעת מ-DELETE+INSERT)
+  const APPROVED_PRODUCTS = new Set((appR.data || []).map(r => r.barcode));
+
   Object.assign(window, {
     BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH,
-    DAILY_DETAILS,
+    DAILY_DETAILS, APPROVED_PRODUCTS,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
     LAST_REFRESH: Date.now(),
   });

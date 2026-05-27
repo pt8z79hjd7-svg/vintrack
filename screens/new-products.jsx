@@ -1,6 +1,7 @@
 // === New Products — products missing prices + recently added ===
 // מוצר נשאר בטאב הזה עד שהמשתמש מאשר אותו (ממלא מחירים + לוחץ ✓ אשר).
-// אישור = is_active נשאר true + יש עלות + יש מחיר מכירה. ללא שניהם — לא ניתן לאשר.
+// אישור = שמירה ב-product_approvals (טבלה נפרדת, לא נמחקת במחזור).
+// אחרי אישור — המוצר נעלם מהטאב הזה.
 const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
   useLiveData();
   const [filter, setFilter] = useState('all');
@@ -11,23 +12,24 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
   const [editPrice, setEditPrice] = useState('');
   const [busy, setBusy] = useState(null);          // barcode currently saving
 
+  const approved = window.APPROVED_PRODUCTS || new Set();
   const now = Date.now();
   const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-  // classify: מוצר "ממתין" = חסר עלות או מחיר או חדש ב-7 ימים ולא אושר
+  // classify: מוצר "ממתין" = חסר עלות או מחיר, או חדש ב-7 ימים ולא אושר
   const classified = PRODUCTS.map(p => {
+    const isApproved = approved.has(p.sku);
     const missingCost = !p.cost || p.cost <= 0;
     const missingPrice = !p.price || p.price <= 0;
     const createdMs = p.created_at ? new Date(p.created_at).getTime() : 0;
     const isNew = createdMs > now - WEEK_MS;
-    // "דורש תשומת לב" = חסר מחיר/עלות, או חדש ועדיין לא מלא
     const needsAttention = missingCost || missingPrice;
     const isRecentNew = isNew && !missingCost && !missingPrice;
-    return { ...p, missingCost, missingPrice, isNew, createdMs, needsAttention, isRecentNew };
+    return { ...p, isApproved, missingCost, missingPrice, isNew, createdMs, needsAttention, isRecentNew };
   });
 
-  // filter
-  let items = classified.filter(p => p.needsAttention || p.isRecentNew);
+  // filter — מוצרים מאושרים לא מופיעים בכלל (חוץ מפילטר "מאושרים")
+  let items = classified.filter(p => !p.isApproved && (p.needsAttention || p.isRecentNew));
   if (filter === 'missing_cost') items = items.filter(p => p.missingCost);
   if (filter === 'missing_price') items = items.filter(p => p.missingPrice);
   if (filter === 'new') items = items.filter(p => p.isNew);
@@ -45,11 +47,13 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
     return 0;
   });
 
-  const countAll = classified.filter(p => p.needsAttention || p.isRecentNew).length;
-  const countMissingCost = classified.filter(p => p.missingCost).length;
-  const countMissingPrice = classified.filter(p => p.missingPrice).length;
-  const countNew = classified.filter(p => p.isNew).length;
-  const countReady = classified.filter(p => p.isRecentNew).length;
+  const pending = classified.filter(p => !p.isApproved);
+  const countAll = pending.filter(p => p.needsAttention || p.isRecentNew).length;
+  const countMissingCost = pending.filter(p => p.missingCost).length;
+  const countMissingPrice = pending.filter(p => p.missingPrice).length;
+  const countNew = pending.filter(p => p.isNew && !p.isApproved).length;
+  const countReady = pending.filter(p => p.isRecentNew).length;
+  const countApproved = classified.filter(p => p.isApproved).length;
 
   const fmtDate = (iso) => {
     if (!iso) return '---';
@@ -94,24 +98,31 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
     }
   };
 
-  // אישור מוצר = שמירת מחירים + סימון כמאושר
+  // אישור מוצר = שמירת מחירים + INSERT ל-product_approvals (נעלם מהטאב)
   const approveProduct = async (p, e) => {
     e.stopPropagation();
-    // אם בעריכה — שמור קודם
     const cost = editing === p.sku ? (parseFloat(editCost) || p.cost) : p.cost;
     const price = editing === p.sku ? (parseFloat(editPrice) || p.price) : p.price;
     if (!cost || cost <= 0 || !price || price <= 0) {
-      (window.toast?.error || alert)('⚠ צריך למלא גם עלות וגם מחיר מכירה לפני אישור');
+      (window.toast?.error || alert)('צריך למלא גם עלות וגם מחיר מכירה לפני אישור');
       if (!editing) startEdit(p, e);
       return;
     }
     setBusy(p.sku);
     try {
-      const { error } = await window.sb.from('products').update({
+      // 1. עדכן מחירים ב-products
+      const { error: e1 } = await window.sb.from('products').update({
         cost_price: cost, sell_price: price, is_active: true,
       }).eq('barcode', p.sku);
-      if (error) throw error;
-      (window.toast?.success || alert)(`✓ ${p.name.slice(0, 25)} אושר`);
+      if (e1) throw e1;
+      // 2. שמור אישור ב-product_approvals (טבלה נפרדת שלא נמחקת במחזור)
+      const { error: e2 } = await window.sb.from('product_approvals').upsert({
+        barcode: p.sku, approved_at: new Date().toISOString(),
+      }, { onConflict: 'barcode' });
+      if (e2) console.warn('product_approvals insert failed:', e2.message);
+      // עדכון מקומי מיידי כדי שהשורה תעלם עוד לפני רענון
+      if (window.APPROVED_PRODUCTS) window.APPROVED_PRODUCTS.add(p.sku);
+      (window.toast?.success || alert)(`${p.name.slice(0, 25)} אושר`);
       setEditing(null);
       setTimeout(() => window.refreshData && window.refreshData('new-products-approve'), 400);
     } catch (err) {
@@ -130,7 +141,9 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
             מוצרים חדשים וחסרי מחיר
           </div>
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            {countAll} מוצרים ממתינים · {countMissingCost} ללא עלות · {countMissingPrice} ללא מחיר · {countReady > 0 ? `${countReady} מוכנים לאישור` : ''}
+            {countAll} ממתינים · {countMissingCost} ללא עלות · {countMissingPrice} ללא מחיר
+            {countReady > 0 ? ` · ${countReady} מוכנים` : ''}
+            {countApproved > 0 ? ` · ${countApproved} אושרו` : ''}
           </div>
         </div>
       </div>

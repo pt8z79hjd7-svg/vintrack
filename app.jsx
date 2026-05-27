@@ -81,7 +81,8 @@ function App() {
   const ordersBadge = ORDERS.filter(o => o.status !== 'completed').length;
   const transfersBadge = TRANSFERS.filter(x => x.status === 'pending').length;
   const negBadge = PRODUCTS.filter(p => p.stock.mikado < 0 || p.stock.kohav < 0).length || undefined;
-  const newProdBadge = PRODUCTS.filter(p => !p.cost || p.cost <= 0 || !p.price || p.price <= 0).length;
+  const _approved = window.APPROVED_PRODUCTS || new Set();
+  const newProdBadge = PRODUCTS.filter(p => !_approved.has(p.sku) && (!p.cost || p.cost <= 0 || !p.price || p.price <= 0)).length;
   const getBadge = (id) => {
     if (id === 'orders') return ordersBadge;
     if (id === 'transfers') return transfersBadge;
