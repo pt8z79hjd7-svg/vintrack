@@ -32,6 +32,12 @@ async function start() {
 
     const App = await waitFor('App');
     root.render(React.createElement(App));
+
+    // ─── בכניסה לאפליקציה: לבקש דוח טרי מהמחשב ───
+    // ההורדה תרוץ ברקע (30-60 שניות). כשתסתיים — realtime יעדכן את התצוגה אוטומטית.
+    setTimeout(() => {
+      if (window.requestFreshSync) window.requestFreshSync('app-open');
+    }, 1500);
   } catch (e) {
     root.render(React.createElement('div',
       { style: { padding: 40, color: '#c0392b', fontSize: 15, lineHeight: 1.6 } },

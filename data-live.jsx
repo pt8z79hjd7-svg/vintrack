@@ -167,6 +167,43 @@ async function refreshData(reason = 'manual') {
 }
 window.refreshData = refreshData;
 
+// ─── requestFreshSync — מבקש מהמחשב להוריד דוח טרי מ-CashOnTab ───
+// כותב שורה ל-sync_requests; sync_worker.py על המחשב יתפוס תוך 5-10 שניות,
+// יריץ את המחזור (~30-60 שניות), ויעדכן processed_at. ה-realtime listener
+// למטה יזהה את העדכון ויקרא ל-refreshData('post-sync') אוטומטית.
+let _lastRequestAt = 0;
+async function requestFreshSync(reason = 'manual') {
+  // Throttle: לא יותר מבקשה אחת כל 30 שניות
+  if (Date.now() - _lastRequestAt < 30000) {
+    console.log('[VinTrack] בקשה נדחתה (throttle 30s)');
+    if (window.toast) window.toast.info('המתנה ~30 שניות בין בקשות');
+    return false;
+  }
+  if (!window.sb) return false;
+  _lastRequestAt = Date.now();
+  try {
+    const { error } = await window.sb.from('sync_requests').insert({
+      reason: reason,
+      status: 'pending',
+      client_id: navigator.userAgent.slice(0, 80),
+    });
+    if (error) {
+      console.warn('[VinTrack] requestFreshSync נכשל:', error.message);
+      // נסיון רענון רגיל (בלי הורדה) כ-fallback
+      refreshData('fallback-' + reason);
+      return false;
+    }
+    console.log('[VinTrack] בקשת הורדה נשלחה:', reason);
+    if (window.toast) window.toast.info('מוריד דוח טרי מ-CashOnTab… (30-60 שניות)', 5000);
+    return true;
+  } catch (e) {
+    console.warn('[VinTrack] requestFreshSync exception:', e?.message);
+    refreshData('fallback-' + reason);
+    return false;
+  }
+}
+window.requestFreshSync = requestFreshSync;
+
 // 1) חזרה לטאב = רענון (אם עברו לפחות 20 שניות מהטעינה האחרונה)
 let _lastLoadAt = Date.now();
 window.addEventListener('vintrack:data-updated', () => { _lastLoadAt = Date.now(); });
@@ -213,6 +250,18 @@ function startRealtime() {
     const ch = window.sb.channel('vintrack-live');
     tables.forEach((t) => ch.on('postgres_changes', { event: '*', schema: 'public', table: t },
                                 () => realtimeRefresh(t)));
+    // sync_requests: כשה-worker מסמן 'done' → רענון מיידי + toast הצלחה
+    ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sync_requests' }, (payload) => {
+      const row = payload?.new;
+      if (row?.status === 'done') {
+        console.log('[VinTrack] sync done by worker — refreshing');
+        if (window.toast) window.toast.success('✓ דוח טרי הורד — הנתונים מתעדכנים…');
+        refreshData('post-worker');
+      } else if (row?.status === 'failed') {
+        console.warn('[VinTrack] sync failed:', row.result);
+        if (window.toast) window.toast.error('הורדת דוח נכשלה: ' + (row.result || '?').slice(0, 100));
+      }
+    });
     ch.subscribe((status) => {
       console.log('[VinTrack] realtime status:', status);
       // אם הסתבכנו (CHANNEL_ERROR / TIMED_OUT) — נסה שוב אחרי 5 שניות

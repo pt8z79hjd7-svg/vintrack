@@ -190,8 +190,8 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
           action={
             <div className="row" style={{ gap: 6 }}>
               <button className="btn btn-sm btn-ghost"
-                      onClick={() => window.refreshData && window.refreshData('manual')}
-                      title="טען נתוני סופאבייס מחדש (לאחר ריצת ההורדה)">
+                      onClick={() => (window.requestFreshSync || window.refreshData)('dashboard-refresh')}
+                      title="הוריד דוח טרי מ-CashOnTab ועדכן">
                 ↻
               </button>
               <button className="btn btn-sm btn-ghost" onClick={() => onNav('daily')}>פירוט →</button>

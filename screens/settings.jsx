@@ -96,18 +96,24 @@ const Settings = ({ activeBranch = 'both' }) => {
       </Card>
 
       {/* פעולות תחזוקה */}
-      <Card title="פעולות תחזוקה" sub="הרצה ידנית של המחזור האוטומטי">
+      <Card title="פעולות תחזוקה" sub="הורדה / רענון מיידיים">
         <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button className="btn btn-primary" onClick={() => {
+            if (window.requestFreshSync) window.requestFreshSync('settings-fresh');
+            else window.refreshData('manual');
+          }}>
+            📥 הורד דוח טרי מ-CashOnTab ועדכן (30-60 שניות)
+          </button>
           <button className="btn" onClick={() => {
-            window.refreshData('manual');
+            window.refreshData('settings-soft');
             (window.toast?.info || alert)('רענון נתונים מסופאבייס...');
           }}>
-            ↻ רענן נתונים מסופאבייס (לא מוריד מחדש מ-CashOnTab)
+            ↻ רענן מסופאבייס בלבד (מהיר, ~2 שניות — בלי הורדה חדשה)
           </button>
           <div className="muted" style={{ fontSize: 11, lineHeight: 1.5 }}>
-            המחזור האוטומטי רץ כל 5 דק׳ בין 09:00-22:00 ומוריד מחדש מ-CashOnTab כשיש תנועה חדשה.
+            <b>"הורד דוח טרי"</b> = שולח בקשה למחשב, שמריץ את המחזור: הורדה מ-CashOnTab → ניתוח → דחיפה לסופאבייס → רענון.
             <br />
-            רענון ידני כאן מטעין רק את הנתונים מסופאבייס (מהיר, ~2 שניות).
+            <b>"רענן מסופאבייס"</b> = רק מטעין את מה שכבר שמור בסופאבייס (בלי הורדה חדשה).
           </div>
         </div>
       </Card>
