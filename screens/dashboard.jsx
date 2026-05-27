@@ -42,6 +42,42 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
     v: m.margin,
   }));
 
+  // ─── סיכום יומי + חודשי מעודכן (לפי בורר הסניף) ───
+  const byDate = window.DAILY_BY_DATE || {};
+  const datesSorted = Object.keys(byDate).sort();
+  const latestDate = datesSorted[datesSorted.length - 1] || '';
+  const todayISO = new Date().toISOString().slice(0, 10);
+  // היום אם קיים, אחרת האחרון הזמין
+  const dailyKey = byDate[todayISO] ? todayISO : latestDate;
+  const dailyRaw = byDate[dailyKey] || { date: '', total: 0, mikado: 0, kohav: 0, profit: 0, margin: 0, salesLines: 0 };
+  const dailyTotal = activeBranch === 'mikado' ? dailyRaw.mikado
+                   : activeBranch === 'kohav'  ? dailyRaw.kohav
+                   : dailyRaw.total;
+  const dailyProfit = activeBranch === 'both' ? dailyRaw.profit
+                    : Math.round(dailyRaw.profit * (dailyRaw.total ? dailyTotal / dailyRaw.total : 0));
+  const dailyHasData = !!byDate[dailyKey];
+  const dailyIsToday = dailyKey === todayISO;
+  // השוואת היום מול ממוצע 7 ימים אחרונים
+  const last7 = datesSorted.slice(-8, -1).map(d => byDate[d]);
+  const avg7 = last7.length ? last7.reduce((a, b) => {
+    const v = activeBranch === 'mikado' ? b.mikado : activeBranch === 'kohav' ? b.kohav : b.total;
+    return a + v;
+  }, 0) / last7.length : 0;
+  const dailyVsAvg = avg7 ? ((dailyTotal - avg7) / avg7) * 100 : 0;
+
+  // חודשי — של החודש הנוכחי
+  const monthRaw = _cur;
+  const monthTotal = activeBranch === 'mikado' ? monthRaw.mikado
+                   : activeBranch === 'kohav'  ? monthRaw.kohav
+                   : monthRaw.total;
+  const monthProfit = activeBranch === 'both' ? monthRaw.profit
+                    : Math.round(monthRaw.profit * (monthRaw.total ? monthTotal / monthRaw.total : 0));
+  // ממוצע יומי בחודש (חלוקה לימים פעילים)
+  const daysActive = monthRaw.days || 1;
+  const avgPerDay = monthTotal / daysActive;
+  // קצב חודשי משוער (avgPerDay × 30)
+  const projectedMonth = avgPerDay * 30;
+
   return (
     <div className="page">
       <div className="between">
@@ -138,6 +174,132 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
             ב-{negativeCats} קטגוריות · לחץ לפרטים
           </div>
         </button>
+      </div>
+
+      {/* ─── סיכום מכירות יומי + חודשי מעודכן ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <Card
+          title={`סיכום יומי · ${dailyKey || '—'}${dailyIsToday ? ' (היום)' : ''}`}
+          sub={dailyHasData ? `${dailyRaw.salesLines} שורות מכירה` : 'אין עדיין נתונים — יורד בריצה הבאה'}
+          action={<button className="btn btn-sm btn-ghost" onClick={() => onNav('daily')}>פירוט →</button>}
+        >
+          <div style={{ padding: 18 }}>
+            {dailyHasData ? (
+              <>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+                  <div>
+                    <div className="muted" style={{ fontSize: 11 }}>מחזור (ללא מע״מ)</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtCurrency(dailyTotal)}
+                    </div>
+                  </div>
+                  {avg7 > 0 && (
+                    <div style={{ textAlign: 'end' }}>
+                      <div className="muted" style={{ fontSize: 11 }}>מול ממוצע 7 ימים</div>
+                      <div className={`row`} style={{ gap: 4, justifyContent: 'flex-end', fontWeight: 700,
+                                                       color: dailyVsAvg >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
+                        {dailyVsAvg >= 0 ? <IArrowUp size={14} /> : <IArrowDown size={14} />}
+                        {Math.abs(dailyVsAvg).toFixed(1)}%
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="grid-2" style={{ gap: 10 }}>
+                  {(activeBranch === 'both' || activeBranch === 'mikado') && (
+                    <div style={{ padding: 10, background: 'var(--surface)', borderRadius: 'var(--r-md)' }}>
+                      <div className="row" style={{ gap: 6, marginBottom: 4 }}>
+                        <span className="branch-dot" style={{ background: BRANCHES[0].color }} />
+                        <span className="muted" style={{ fontSize: 12 }}>מיקדו</span>
+                      </div>
+                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(dailyRaw.mikado)}</div>
+                    </div>
+                  )}
+                  {(activeBranch === 'both' || activeBranch === 'kohav') && (
+                    <div style={{ padding: 10, background: 'var(--surface)', borderRadius: 'var(--r-md)' }}>
+                      <div className="row" style={{ gap: 6, marginBottom: 4 }}>
+                        <span className="branch-dot" style={{ background: BRANCHES[1].color }} />
+                        <span className="muted" style={{ fontSize: 12 }}>כוכב הצפון</span>
+                      </div>
+                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(dailyRaw.kohav)}</div>
+                    </div>
+                  )}
+                </div>
+                <div className="row" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)', justifyContent: 'space-between' }}>
+                  <div>
+                    <div className="muted" style={{ fontSize: 11 }}>רווח גולמי</div>
+                    <div style={{ fontWeight: 700, color: 'var(--ok)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(dailyProfit)}</div>
+                  </div>
+                  <div style={{ textAlign: 'end' }}>
+                    <div className="muted" style={{ fontSize: 11 }}>מרווח</div>
+                    <div style={{ fontWeight: 700 }}><span className={`badge ${dailyRaw.margin >= 25 ? 'ok' : 'warn'}`}>{Number(dailyRaw.margin || 0).toFixed(1)}%</span></div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ textAlign: 'center', padding: 30, color: 'var(--ink-3)', fontSize: 13 }}>
+                {dailyIsToday
+                  ? 'הורדת המכירות תרוץ אוטומטית בשעה הקרובה (09/12/15/18/21).'
+                  : 'אין נתונים לתאריך זה.'}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card
+          title={`סיכום חודשי · ${monthRaw.m || ''}`}
+          sub={`${daysActive} ימי פעילות · ממוצע ${fmtCurrency(Math.round(avgPerDay))}/יום`}
+          action={<button className="btn btn-sm btn-ghost" onClick={() => onNav('monthly')}>פירוט →</button>}
+        >
+          <div style={{ padding: 18 }}>
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>מחזור עד עכשיו (ללא מע״מ)</div>
+                <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtCurrency(monthTotal)}
+                </div>
+              </div>
+              <div style={{ textAlign: 'end' }}>
+                <div className="muted" style={{ fontSize: 11 }}>קצב חודשי משוער</div>
+                <div style={{ fontWeight: 700, color: 'var(--ink-2)', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtCurrency(Math.round(projectedMonth))}
+                </div>
+              </div>
+            </div>
+            <div className="grid-2" style={{ gap: 10 }}>
+              {(activeBranch === 'both' || activeBranch === 'mikado') && (
+                <div style={{ padding: 10, background: 'var(--surface)', borderRadius: 'var(--r-md)' }}>
+                  <div className="row" style={{ gap: 6, marginBottom: 4 }}>
+                    <span className="branch-dot" style={{ background: BRANCHES[0].color }} />
+                    <span className="muted" style={{ fontSize: 12 }}>מיקדו</span>
+                  </div>
+                  <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(monthRaw.mikado)}</div>
+                </div>
+              )}
+              {(activeBranch === 'both' || activeBranch === 'kohav') && (
+                <div style={{ padding: 10, background: 'var(--surface)', borderRadius: 'var(--r-md)' }}>
+                  <div className="row" style={{ gap: 6, marginBottom: 4 }}>
+                    <span className="branch-dot" style={{ background: BRANCHES[1].color }} />
+                    <span className="muted" style={{ fontSize: 12 }}>כוכב הצפון</span>
+                  </div>
+                  <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(monthRaw.kohav)}</div>
+                </div>
+              )}
+            </div>
+            <div className="row" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)', justifyContent: 'space-between' }}>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>רווח גולמי</div>
+                <div style={{ fontWeight: 700, color: 'var(--ok)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(monthProfit)}</div>
+              </div>
+              <div style={{ textAlign: 'end' }}>
+                <div className="muted" style={{ fontSize: 11 }}>מרווח</div>
+                <div style={{ fontWeight: 700 }}><span className={`badge ${monthRaw.margin >= 25 ? 'ok' : 'warn'}`}>{Number(monthRaw.margin || 0).toFixed(1)}%</span></div>
+              </div>
+            </div>
+            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>
+              עדכון אחרון: {latestDate || '—'}
+            </div>
+          </div>
+        </Card>
       </div>
 
       {/* Bar chart + Pie */}
