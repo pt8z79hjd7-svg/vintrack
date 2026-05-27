@@ -111,13 +111,215 @@ const Daily = ({ activeBranch = 'both' }) => {
         </div>
       </div>
 
-      <Card title="פירוט מכירות" sub={`${d.salesLines} שורות · ${d.date || ''}`}>
-        <div style={{ padding: 28, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13.5, lineHeight: 1.8 }}>
-          סיכום היום מוצג למעלה (מחזור, סניפים, רווח, מרווח).<br />
-          פירוט שורה-אחר-שורה יתווסף בשלב הבא (דחיפת יומן המכירות ל-Supabase).
-        </div>
-      </Card>
+      {/* ─── פרטי יום מורחבים (מ-daily_details) ─── */}
+      <DailyExpanded date={date} hasData={hasData} />
     </div>
+  );
+};
+
+// === DailyExpanded — מובילים, 05, הנחות, חריגות, חדשים ===
+const DailyExpanded = ({ date, hasData }) => {
+  const det = (window.DAILY_DETAILS || {})[date];
+
+  if (!hasData) return null;
+  if (!det) return (
+    <Card title="פירוט מורחב">
+      <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
+        אין עדיין פרטים מורחבים ליום זה. הם ייווצרו בריצה הבאה של הצינור.
+      </div>
+    </Card>
+  );
+
+  const { top_sellers = [], generic_05 = [], club_discounts = [], price_anomalies = [], new_products = [], promo_stats = {} } = det;
+  const promoEntries = Object.entries(promo_stats).filter(([, v]) => v > 0);
+
+  return (
+    <>
+      {/* 🏆 מובילי היום */}
+      {top_sellers.length > 0 && (
+        <Card title="🏆 מובילי היום" sub={`${top_sellers.length} מוצרים מובילים לפי הכנסה`}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>מוצר</th>
+                  <th style={{ textAlign: 'end' }}>כמות</th>
+                  <th style={{ textAlign: 'end' }}>הכנסה (כולל מע"מ)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {top_sellers.map((s, i) => (
+                  <tr key={i}>
+                    <td style={{ fontWeight: 700, color: i < 3 ? 'var(--accent)' : 'var(--ink-3)' }}>{i + 1}</td>
+                    <td>{s.name}</td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>{s.qty}</td>
+                    <td style={{ textAlign: 'end', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>₪{s.revenue?.toLocaleString('he-IL')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* 🏷️ מבצעים שזוהו */}
+      {promoEntries.length > 0 && (
+        <Card title="🏷️ מבצעים שזוהו" sub="זוהו אוטומטית מחשבוניות">
+          <div style={{ padding: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {promoEntries.map(([name, count]) => (
+              <div key={name} style={{
+                padding: '8px 14px', borderRadius: 'var(--r-md)', background: 'var(--accent-soft)',
+                color: 'var(--accent)', fontWeight: 600, fontSize: 13
+              }}>
+                {name}: {count} פריטים
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* ☕ פריטי 05 (כלליים) */}
+      {generic_05.length > 0 && (
+        <Card title="☕ פריטים כלליים (05)" sub={`${generic_05.length} חשבוניות עם פריט כללי בעל שם`}>
+          <div style={{ padding: 14 }}>
+            {generic_05.map((g, gi) => (
+              <div key={gi} style={{
+                marginBottom: 12, padding: 12, background: 'var(--surface)',
+                borderRadius: 'var(--r-md)', border: '1px solid var(--line)'
+              }}>
+                <div className="row" style={{ gap: 8, marginBottom: 8, fontSize: 12, color: 'var(--ink-3)' }}>
+                  <span>👤 {g.worker || '—'}</span>
+                  <span>·</span>
+                  <span>{g.branch || '—'}</span>
+                  <span>·</span>
+                  <span>{g.time || '—'}</span>
+                </div>
+                {(g.items || []).map((it, ii) => (
+                  <div key={ii} className="row" style={{
+                    justifyContent: 'space-between', padding: '4px 0',
+                    borderTop: ii > 0 ? '1px solid var(--line)' : 'none',
+                    fontWeight: it.is_generic ? 700 : 400,
+                    color: it.is_generic ? 'var(--accent)' : 'var(--ink-1)'
+                  }}>
+                    <span>{it.is_generic ? '☕ ' : '  · '}{it.name} ×{it.qty}</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      ₪{it.total}
+                      {it.discount > 0 && <span className="muted" style={{ fontSize: 11 }}> (-{it.discount}%)</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* 🎫 הנחות מועדון */}
+      {club_discounts.length > 0 && (
+        <Card title="🎫 הנחות מועדון" sub={`${club_discounts.length} הנחות מעל 5%`}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>מוצר</th>
+                  <th style={{ textAlign: 'end' }}>הנחה</th>
+                  <th style={{ textAlign: 'end' }}>מחיר</th>
+                  <th>סניף</th>
+                  <th>עובד</th>
+                  <th>שעה</th>
+                </tr>
+              </thead>
+              <tbody>
+                {club_discounts.map((cd, i) => (
+                  <tr key={i}>
+                    <td>{cd.name}</td>
+                    <td style={{ textAlign: 'end', color: cd.discount_pct > 20 ? 'var(--danger)' : 'var(--warn)', fontWeight: 600 }}>
+                      {cd.discount_pct}%
+                    </td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>
+                      <span className="muted" style={{ textDecoration: 'line-through' }}>₪{cd.price_before}</span>
+                      {' → '}₪{cd.price_after}
+                    </td>
+                    <td>{cd.branch}</td>
+                    <td>{cd.worker}</td>
+                    <td>{cd.time}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* ⚠️ חריגות מחיר */}
+      {price_anomalies.length > 0 && (
+        <Card title="⚠️ חריגות מחיר" sub={`${price_anomalies.length} מוצרים נמכרו במחיר שונה מהרגיל`}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>מוצר</th>
+                  <th style={{ textAlign: 'end' }}>בפועל</th>
+                  <th style={{ textAlign: 'end' }}>רשמי</th>
+                  <th>הערה</th>
+                  <th>סניף</th>
+                  <th>עובד</th>
+                </tr>
+              </thead>
+              <tbody>
+                {price_anomalies.map((pa, i) => (
+                  <tr key={i}>
+                    <td>{pa.name}</td>
+                    <td style={{ textAlign: 'end', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>₪{pa.actual}</td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', color: 'var(--ink-3)' }}>₪{pa.official}</td>
+                    <td style={{ fontSize: 12, color: 'var(--warn)' }}>{pa.note}</td>
+                    <td>{pa.branch}</td>
+                    <td>{pa.worker}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* 🆕 מוצרים חדשים */}
+      {new_products.length > 0 && (
+        <Card title="🆕 מוצרים חדשים" sub={`${new_products.length} מוצרים שנוספו לקובץ היום`}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>ברקוד</th>
+                  <th>שם</th>
+                  <th>ספק</th>
+                </tr>
+              </thead>
+              <tbody>
+                {new_products.map((np, i) => (
+                  <tr key={i}>
+                    <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{np.barcode}</td>
+                    <td>{np.name}</td>
+                    <td>{np.supplier}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* אם הכל ריק */}
+      {top_sellers.length === 0 && generic_05.length === 0 && club_discounts.length === 0
+        && price_anomalies.length === 0 && new_products.length === 0 && promoEntries.length === 0 && (
+        <Card>
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--ok)', fontSize: 14, fontWeight: 600 }}>
+            ✅ אין חריגות או אירועים מיוחדים היום
+          </div>
+        </Card>
+      )}
+    </>
   );
 };
 

@@ -18,13 +18,14 @@ Object.assign(window, {
     { id: 'kohav', name: 'כוכב הצפון', color: 'oklch(0.62 0.14 60)' },
   ],
   CATEGORIES: [{ id: 'all', label: 'הכל' }], SUPPLIERS: [], PRODUCTS: [],
-  MONTHLY: [], DAILY_SAMPLE: {}, DAILY_BY_DATE: {}, ORDERS: [], TRANSFERS: [], PROMOTIONS: [],
+  MONTHLY: [], DAILY_SAMPLE: {}, DAILY_BY_DATE: {}, DAILY_DETAILS: {},
+  ORDERS: [], TRANSFERS: [], PROMOTIONS: [],
   ACTIVITY: [], INVENTORY_VALUE_BY_MONTH: [], PAST_ORDERS: {}, LAST_RECEIVED: {},
 });
 
 async function loadAllData() {
   const sb = window.sb;
-  const [prodR, monR, dayR, invR, dealR, transR, ordR] = await Promise.all([
+  const [prodR, monR, dayR, invR, dealR, transR, ordR, detR] = await Promise.all([
     sb.from('products').select('*').limit(5000),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
@@ -32,6 +33,7 @@ async function loadAllData() {
     sb.from('import_deals').select('*'),
     sb.from('transfers').select('*'),
     sb.from('order_recommendations').select('*'),
+    sb.from('daily_details').select('*').order('summary_date', { ascending: false }).limit(60),
   ]);
   const products = prodR.data || [];
 
@@ -134,11 +136,30 @@ async function loadAllData() {
     items: ordBySup[sup].length, sum: 0, status: 'pending', tone: 'warn',
   }));
 
+  // פרטי יום מורחבים (מובילים, 05, הנחות, חריגות, חדשים) — לטאב Daily
+  const DAILY_DETAILS = {};
+  (detR.data || []).forEach((r) => {
+    if (!r.summary_date) return;
+    const _jp = (v) => { try { return typeof v === 'string' ? JSON.parse(v) : (v || []); } catch { return []; } };
+    DAILY_DETAILS[r.summary_date] = {
+      top_sellers: _jp(r.top_sellers),
+      generic_05: _jp(r.generic_05),
+      club_discounts: _jp(r.club_discounts),
+      price_anomalies: _jp(r.price_anomalies),
+      new_products: _jp(r.new_products),
+      promo_stats: typeof r.promo_stats === 'string' ? JSON.parse(r.promo_stats || '{}') : (r.promo_stats || {}),
+      total_revenue: n(r.total_revenue),
+      receipts: n(r.receipts),
+      avg_basket: n(r.avg_basket),
+    };
+  });
+
   Object.assign(window, {
     BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH,
+    DAILY_DETAILS,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
-    LAST_REFRESH: Date.now(),  // מתי הנתון נטען מסופאבייס (לתצוגת "עודכן לפני X")
+    LAST_REFRESH: Date.now(),
   });
 }
 
