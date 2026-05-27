@@ -8,34 +8,39 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="VinTrack" />
-  <link rel="stylesheet" href="styles.css" />
+  <!-- מונע cache של קבצים כדי שעדכונים יגיעו מיד -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <link rel="stylesheet" href="styles.css?v=20260527d" />
 
   <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js"></script>
+  <script src="supabase-config.js?v=20260527d"></script>
 </head>
 <body>
   <div id="root"></div>
 
-  <script type="text/babel" src="toast.jsx"></script>
-  <script type="text/babel" src="tweaks-panel.jsx"></script>
-  <script type="text/babel" src="data-live.jsx"></script>
-  <script type="text/babel" src="icons.jsx"></script>
-  <script type="text/babel" src="components.jsx"></script>
-  <script type="text/babel" src="screens/dashboard.jsx"></script>
-  <script type="text/babel" src="screens/inventory.jsx"></script>
-  <script type="text/babel" src="screens/operations.jsx"></script>
-  <script type="text/babel" src="screens/order-builder.jsx"></script>
-  <script type="text/babel" src="screens/summary.jsx"></script>
-  <script type="text/babel" src="screens/analysis.jsx"></script>
-  <script type="text/babel" src="screens/sales.jsx"></script>
-  <script type="text/babel" src="screens/scanner.jsx"></script>
-  <script type="text/babel" src="screens/settings.jsx"></script>
-  <script type="text/babel" src="screens/modals.jsx"></script>
-  <script type="text/babel" src="app.jsx"></script>
-  <script type="text/babel" src="auth.jsx"></script>
-  <script type="text/babel" src="boot.jsx"></script>
+  <!-- כל קובץ עם ?v=... — cache buster כדי שמובייל יקבל את הגרסה החדשה -->
+  <script type="text/babel" src="toast.jsx?v=20260527d"></script>
+  <script type="text/babel" src="tweaks-panel.jsx?v=20260527d"></script>
+  <script type="text/babel" src="data-live.jsx?v=20260527d"></script>
+  <script type="text/babel" src="icons.jsx?v=20260527d"></script>
+  <script type="text/babel" src="components.jsx?v=20260527d"></script>
+  <script type="text/babel" src="screens/dashboard.jsx?v=20260527d"></script>
+  <script type="text/babel" src="screens/inventory.jsx?v=20260527d"></script>
+  <script type="text/babel" src="screens/operations.jsx?v=20260527d"></script>
+  <script type="text/babel" src="screens/order-builder.jsx?v=20260527d"></script>
+  <script type="text/babel" src="screens/summary.jsx?v=20260527d"></script>
+  <script type="text/babel" src="screens/analysis.jsx?v=20260527d"></script>
+  <script type="text/babel" src="screens/sales.jsx?v=20260527d"></script>
+  <script type="text/babel" src="screens/scanner.jsx?v=20260527d"></script>
+  <script type="text/babel" src="screens/settings.jsx?v=20260527d"></script>
+  <script type="text/babel" src="screens/modals.jsx?v=20260527d"></script>
+  <script type="text/babel" src="app.jsx?v=20260527d"></script>
+  <script type="text/babel" src="auth.jsx?v=20260527d"></script>
+  <script type="text/babel" src="boot.jsx?v=20260527d"></script>
 </body>
 </html>
