@@ -182,10 +182,13 @@ async function requestFreshSync(reason = 'manual') {
   if (!window.sb) return false;
   _lastRequestAt = Date.now();
   try {
-    const { error } = await window.sb.from('sync_requests').insert({
-      reason: reason,
-      status: 'pending',
-      client_id: navigator.userAgent.slice(0, 80),
+    // משתמשים בטבלת additional_income הקיימת כתור-בקשות (חוסך SQL DDL)
+    // month='__SYNC_REQUEST__' = signal. amount = timestamp ms. ה-worker מוחק אחרי שטיפל.
+    const { error } = await window.sb.from('additional_income').insert({
+      month: '__SYNC_REQUEST__',
+      description: reason.slice(0, 100),
+      amount: Date.now(),
+      has_invoice: false,
     });
     if (error) {
       console.warn('[VinTrack] requestFreshSync נכשל:', error.message);
@@ -250,16 +253,14 @@ function startRealtime() {
     const ch = window.sb.channel('vintrack-live');
     tables.forEach((t) => ch.on('postgres_changes', { event: '*', schema: 'public', table: t },
                                 () => realtimeRefresh(t)));
-    // sync_requests: כשה-worker מסמן 'done' → רענון מיידי + toast הצלחה
-    ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sync_requests' }, (payload) => {
-      const row = payload?.new;
-      if (row?.status === 'done') {
+    // sync trigger: כשה-worker מוחק את הבקשה מ-additional_income → סימן שסיים
+    ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'additional_income' }, (payload) => {
+      const row = payload?.old;
+      if (row?.month === '__SYNC_REQUEST__') {
         console.log('[VinTrack] sync done by worker — refreshing');
-        if (window.toast) window.toast.success('✓ דוח טרי הורד — הנתונים מתעדכנים…');
-        refreshData('post-worker');
-      } else if (row?.status === 'failed') {
-        console.warn('[VinTrack] sync failed:', row.result);
-        if (window.toast) window.toast.error('הורדת דוח נכשלה: ' + (row.result || '?').slice(0, 100));
+        if (window.toast) window.toast.success('✓ דוח טרי הורד — מתעדכן…');
+        // המתנה קצרה לוודא ש-supabase_sync סיים לדחוף, ואז רענון
+        setTimeout(() => refreshData('post-worker'), 1500);
       }
     });
     ch.subscribe((status) => {
