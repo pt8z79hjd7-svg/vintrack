@@ -152,8 +152,10 @@ async function refreshData(reason = 'manual') {
   if (_refreshing) return;
   _refreshing = true;
   window.dispatchEvent(new CustomEvent('vintrack:refresh-start', { detail: { reason, at: Date.now() } }));
+  // Timeout — אם loadAllData נתקע (realtime מקולקל וכו') — לעבור הלאה אחרי 15 שניות
+  const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 15s')), 15000));
   try {
-    await loadAllData();
+    await Promise.race([loadAllData(), timeoutPromise]);
     window.dispatchEvent(new CustomEvent('vintrack:data-updated', { detail: { reason, at: Date.now() } }));
     console.log('[VinTrack] רענון נתונים:', reason);
   } catch (e) {
@@ -184,6 +186,25 @@ setInterval(() => {
 }, 90000);
 
 // 3) Supabase realtime — אם הטבלאות משתנות בצד שרת, נקבל דחיפה ונרענן מיד
+// ⚠ throttle: לא יותר מrefresh אחד כל 8 שניות, גם אם 1,000 שינויים נכנסים בבת אחת
+let _rtLastRefresh = 0;
+let _rtDebounce = null;
+function realtimeRefresh(table) {
+  const since = Date.now() - _rtLastRefresh;
+  if (since < 8000) {
+    // יותר מדי events בבת אחת — דחה ל-8 שניות, אבל רק פעם אחת
+    if (_rtDebounce) return;
+    _rtDebounce = setTimeout(() => {
+      _rtDebounce = null;
+      _rtLastRefresh = Date.now();
+      refreshData('realtime:throttled');
+    }, 8000 - since);
+    return;
+  }
+  _rtLastRefresh = Date.now();
+  refreshData('realtime:' + table);
+}
+
 function startRealtime() {
   try {
     if (!window.sb) return;
@@ -191,8 +212,17 @@ function startRealtime() {
                     'order_recommendations', 'transfers', 'import_deals'];
     const ch = window.sb.channel('vintrack-live');
     tables.forEach((t) => ch.on('postgres_changes', { event: '*', schema: 'public', table: t },
-                                () => refreshData('realtime:' + t)));
-    ch.subscribe();
+                                () => realtimeRefresh(t)));
+    ch.subscribe((status) => {
+      console.log('[VinTrack] realtime status:', status);
+      // אם הסתבכנו (CHANNEL_ERROR / TIMED_OUT) — נסה שוב אחרי 5 שניות
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        setTimeout(() => {
+          try { window._vtChannel?.unsubscribe(); } catch (_) {}
+          startRealtime();
+        }, 5000);
+      }
+    });
     window._vtChannel = ch;
   } catch (e) { console.warn('realtime לא זמין:', e?.message); }
 }
