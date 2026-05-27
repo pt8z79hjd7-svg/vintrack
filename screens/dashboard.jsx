@@ -50,6 +50,9 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
   // היום אם קיים, אחרת האחרון הזמין
   const dailyKey = byDate[todayISO] ? todayISO : latestDate;
   const dailyRaw = byDate[dailyKey] || { date: '', total: 0, mikado: 0, kohav: 0, profit: 0, margin: 0, salesLines: 0 };
+  // נכון לעת ההורדה האחרונה (מתי הנתון של הסיכום היומי נכתב לאחרונה)
+  const lastUpdate = window.LAST_REFRESH ? new Date(window.LAST_REFRESH) : new Date();
+  const minsAgo = Math.round((Date.now() - lastUpdate.getTime()) / 60000);
   const dailyTotal = activeBranch === 'mikado' ? dailyRaw.mikado
                    : activeBranch === 'kohav'  ? dailyRaw.kohav
                    : dailyRaw.total;
@@ -180,8 +183,19 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Card
           title={`סיכום יומי · ${dailyKey || '—'}${dailyIsToday ? ' (היום)' : ''}`}
-          sub={dailyHasData ? `${dailyRaw.salesLines} שורות מכירה` : 'אין עדיין נתונים — יורד בריצה הבאה'}
-          action={<button className="btn btn-sm btn-ghost" onClick={() => onNav('daily')}>פירוט →</button>}
+          sub={dailyHasData
+            ? `${dailyRaw.salesLines} שורות מכירה · עודכן לפני ${minsAgo < 1 ? 'רגע' : minsAgo < 60 ? minsAgo + ' דק׳' : Math.round(minsAgo/60) + ' שע׳'}${dailyIsToday ? ' · הנתון חי, גדל לאורך היום' : ''}`
+            : 'אין עדיין נתונים — יורד בריצה הבאה'}
+          action={
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn btn-sm btn-ghost"
+                      onClick={() => window.refreshData && window.refreshData('manual')}
+                      title="טען נתוני סופאבייס מחדש (לאחר ריצת ההורדה)">
+                ↻
+              </button>
+              <button className="btn btn-sm btn-ghost" onClick={() => onNav('daily')}>פירוט →</button>
+            </div>
+          }
         >
           <div style={{ padding: 18 }}>
             {dailyHasData ? (

@@ -26,8 +26,12 @@ const Daily = ({ activeBranch = 'both' }) => {
     <div className="page">
       <div className="between">
         <div>
-          <div className="crumbs">סיכום יומי</div>
-          <div className="page-title" style={{ fontSize: 22, marginTop: 4 }}>סיכום יומי</div>
+          <div className="crumbs">סיכום יומי
+            {date === todayISO && hasData && <span style={{ marginInlineStart: 8, color: 'var(--ok)' }}>● חי (יתעדכן בשעה הקרובה)</span>}
+          </div>
+          <div className="page-title" style={{ fontSize: 22, marginTop: 4 }}>
+            סיכום יומי {date === todayISO && hasData && <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink-3)', marginInlineStart: 8 }}>מכירות עד עכשיו</span>}
+          </div>
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
             בחר תאריך — הנתונים נטענים מ-{dates.length} ימי פעילות
             {activeBranch !== 'both' && ` · ${activeBranch === 'mikado' ? 'מיקדו' : 'כוכב הצפון'} בלבד`}

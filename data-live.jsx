@@ -135,6 +135,7 @@ async function loadAllData() {
     BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
+    LAST_REFRESH: Date.now(),  // מתי הנתון נטען מסופאבייס (לתצוגת "עודכן לפני X")
   });
 }
 
