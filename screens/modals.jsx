@@ -20,6 +20,7 @@ const ProductDetailModal = ({ product, onClose }) => {
   const [price, setPrice] = useState(product.price);
   const [cost, setCost] = useState(product.cost);
   const [supplier, setSupplier] = useState(product.supplier);
+  const [minStock, setMinStock] = useState(product.min_stock ?? 3);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [parallel, setParallel] = useState(product.parallel);
@@ -28,7 +29,7 @@ const ProductDetailModal = ({ product, onClose }) => {
   const saveProduct = async () => {
     setSaving(true);
     const { error } = await window.sb.from('products')
-      .update({ sell_price: price, cost_price: cost, supplier })
+      .update({ sell_price: price, cost_price: cost, supplier, min_stock: Math.max(0, Number(minStock) || 0) })
       .eq('barcode', product.sku);
     setSaving(false);
     if (error) {
@@ -137,6 +138,26 @@ const ProductDetailModal = ({ product, onClose }) => {
                   {(((price - cost) / price) * 100).toFixed(0)}%
                 </div>
               </div>
+            </div>
+            {/* מינימום מלאי — מתי להזמין */}
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
+                          display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between' }}>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>מינימום מלאי להתראה</div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                  אם מלאי כולל מתחת לזה — תופיע התראה להזמנה
+                </div>
+              </div>
+              {editing ? (
+                <input className="input" type="number" min="0" step="1" value={minStock}
+                       onChange={(e) => setMinStock(+e.target.value)}
+                       style={{ width: 80, fontSize: 16, fontWeight: 700, padding: '4px 8px', textAlign: 'center' }} />
+              ) : (
+                <div style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                              padding: '4px 14px', background: 'var(--surface)', borderRadius: 'var(--r-md)' }}>
+                  {minStock} יח׳
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -11,6 +11,7 @@ const NAV_SECONDARY = [
   { id: 'daily',     label: 'סיכום יומי',  Icon: ICalendar },
   { id: 'monthly',   label: 'סיכום חודשי', Icon: ITrend },
   { id: 'analysis',  label: 'ניתוח וחריגות', Icon: IPercent },
+  { id: 'settings',  label: 'הגדרות',      Icon: ISettings },
 ];
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -71,6 +72,7 @@ function App() {
     daily:     'סיכום יומי',
     monthly:   'סיכום חודשי',
     analysis:  'ניתוח וחריגות',
+    settings:  'הגדרות',
   };
 
   return (
@@ -198,6 +200,7 @@ function App() {
         {tab === 'monthly'   && <Monthly activeBranch={activeBranch} />}
         {tab === 'analysis'  && <Analysis activeBranch={activeBranch} />}
         {tab === 'sales'     && <Sales activeBranch={activeBranch} />}
+        {tab === 'settings'  && <Settings activeBranch={activeBranch} />}
       </main>
 
       {/* Modals */}

@@ -60,6 +60,8 @@ async function loadAllData() {
     weekly: n(p.weekly_velocity),
     margin: n(p.profit_margin),
     is_promo: !!p.is_promo,
+    min_stock: n(p.min_stock),
+    effective_sell_price: p.effective_sell_price != null ? n(p.effective_sell_price) : null,
     updated: '',
   }));
 
