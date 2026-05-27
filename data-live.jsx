@@ -115,10 +115,11 @@ async function loadAllData() {
 
   // מבצעים
   const PROMOTIONS = (dealR.data || []).map((d) => ({
-    supplier: d.supplier || '', title: d.title || d.product_name || '', ends: d.valid_until || '',
+    id: d.id, supplier: d.supplier || '', title: d.title || d.product_name || '', ends: d.valid_until || '',
     items: 0, barcode: d.barcode || '',
+    deal_cost: d.deal_cost || 0, regular_cost: d.regular_cost || 0, sell_price: d.sell_price || 0,
     discount: (d.regular_cost && d.deal_cost) ? Math.round((1 - d.deal_cost / d.regular_cost) * 100) : 0,
-    type: 'category',
+    notes: d.notes || '', is_active: d.is_active !== false,
   }));
 
   // העברות

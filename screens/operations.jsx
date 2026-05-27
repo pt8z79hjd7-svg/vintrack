@@ -368,66 +368,231 @@ const TransferModal = ({ initial, onClose }) => {
 };
 
 // === Promotions ===
-const Promotions = () => (
-  <div className="page">
-    <div className="between">
-      <div>
-        <div className="crumbs">מבצעי ספקים</div>
-        <div className="page-title" style={{ fontSize: 22, marginTop: 4 }}>מבצעים פעילים</div>
-        <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-          {PROMOTIONS.length} מבצעים זמינים · התראה אוטומטית 7 ימים לפני תום מבצע
+const Promotions = ({ activeBranch = 'both' }) => {
+  useLiveData();
+  const [showAdd, setShowAdd] = useState(false);
+  const [busy, setBusy] = useState(null);
+  const [search, setSearch] = useState('');
+  const [view, setView] = useState('cards'); // cards | table
+
+  // טופס הוספה
+  const [f, setF] = useState({ title: '', supplier: '', barcode: '', deal_cost: '', regular_cost: '', sell_price: '', min_qty: '1', valid_until: '', notes: '' });
+  const upd = (k, v) => setF(prev => ({ ...prev, [k]: v }));
+
+  const promos = (window.PROMOTIONS || []).filter(p => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (p.title || '').toLowerCase().includes(q) || (p.supplier || '').toLowerCase().includes(q) || (p.barcode || '').includes(q);
+  });
+
+  const te = { textAlign: 'end', fontVariantNumeric: 'tabular-nums' };
+
+  // הוספת מבצע חדש
+  const addDeal = async () => {
+    if (!f.title) { (window.toast?.error || alert)('חסר שם מוצר'); return; }
+    setBusy('add');
+    try {
+      const rec = {
+        title: f.title, supplier: f.supplier || 'לא ידוע', product_name: f.title,
+        barcode: f.barcode || '', deal_cost: parseFloat(f.deal_cost) || null,
+        regular_cost: parseFloat(f.regular_cost) || null, sell_price: parseFloat(f.sell_price) || null,
+        min_quantity: parseInt(f.min_qty) || 1, valid_until: f.valid_until || null,
+        notes: f.notes || '', is_active: true,
+      };
+      const { error } = await window.sb.from('import_deals').insert(rec);
+      if (error) throw error;
+      (window.toast?.success || alert)('✓ מבצע נוסף');
+      setShowAdd(false);
+      setF({ title: '', supplier: '', barcode: '', deal_cost: '', regular_cost: '', sell_price: '', min_qty: '1', valid_until: '', notes: '' });
+      setTimeout(() => window.refreshData?.('promo-add'), 400);
+    } catch (err) {
+      (window.toast?.error || alert)('שגיאה: ' + err.message);
+    } finally { setBusy(null); }
+  };
+
+  // מחיקת מבצע
+  const deleteDeal = async (p) => {
+    if (!confirm(`למחוק את "${p.title}"?`)) return;
+    setBusy(p.barcode || p.title);
+    try {
+      // מחיקה לפי id אם יש, אחרת לפי barcode+title
+      let q = window.sb.from('import_deals').delete();
+      if (p.id) q = q.eq('id', p.id);
+      else q = q.eq('barcode', p.barcode).eq('title', p.title);
+      const { error } = await q;
+      if (error) throw error;
+      (window.toast?.success || alert)('✓ נמחק');
+      setTimeout(() => window.refreshData?.('promo-del'), 400);
+    } catch (err) {
+      (window.toast?.error || alert)('שגיאה: ' + err.message);
+    } finally { setBusy(null); }
+  };
+
+  const fmtCurr = (v) => v ? `₪${Number(v).toLocaleString('he-IL', { maximumFractionDigits: 0 })}` : '---';
+
+  return (
+    <div className="page">
+      <div className="between">
+        <div>
+          <div className="crumbs">מבצעי ספקים</div>
+          <div className="page-title" style={{ fontSize: 22, marginTop: 4 }}>מבצעים פעילים</div>
+          <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+            {promos.length} מבצעים זמינים
+            {promos.length > 0 && ` · חיסכון ממוצע ${Math.round(promos.reduce((s, p) => s + (p.discount || 0), 0) / promos.length)}%`}
+          </div>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <button className={`btn btn-sm ${view === 'cards' ? 'btn-primary' : ''}`} onClick={() => setView('cards')}>כרטיסים</button>
+          <button className={`btn btn-sm ${view === 'table' ? 'btn-primary' : ''}`} onClick={() => setView('table')}>טבלה</button>
+          <button className="btn btn-primary" onClick={() => setShowAdd(!showAdd)}>
+            <IPlus size={16} /> {showAdd ? 'ביטול' : 'הוסף מבצע'}
+          </button>
         </div>
       </div>
-      <button className="btn"><IDownload size={16} /> ייצוא רשימה</button>
-    </div>
 
-    <div className="grid-3">
-      {PROMOTIONS.map((p, i) => {
-        const sup = SUPPLIERS.find(s => s.id === p.supplier);
-        const typeBadge = {
-          category: 'הנחה בקטגוריה',
-          b1g1: '1+1',
-          volume: 'הנחת כמות',
-          payment: 'הנחת תשלום',
-        }[p.type];
-        return (
-          <Card key={i}>
-            <div className="promo-card">
-              <div className="promo-discount">
-                <div className="promo-discount-num">{p.discount}%</div>
-                <div className="promo-discount-label">
-                  {p.type === 'b1g1' ? '1+1' : 'הנחה'}
-                </div>
-              </div>
-              <div style={{ padding: 18, flex: 1 }}>
-                <div className="row" style={{ marginBottom: 8 }}>
-                  <Badge tone="accent">{typeBadge}</Badge>
-                </div>
-                <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.01em', lineHeight: 1.3 }}>
-                  {p.title}
-                </div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{sup?.name}</div>
+      {/* חיפוש */}
+      <div className="row" style={{ gap: 12, marginTop: 10 }}>
+        <div className="search-bar" style={{ flex: 1, maxWidth: 360 }}>
+          <ISearch size={15} />
+          <input placeholder="חיפוש מוצר, ברקוד, ספק..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+      </div>
 
-                <div className="between" style={{ marginTop: 14, fontSize: 12 }}>
-                  <div className="row" style={{ color: 'var(--ink-3)' }}>
-                    <ICalendar size={13} />
-                    <span>בתוקף עד {p.ends}</span>
+      {/* טופס הוספת מבצע */}
+      {showAdd && (
+        <Card title="הוספת מבצע חדש" sub="הכנס ידנית או השתמש בסקריפט PDF">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, padding: '4px 0' }}>
+            <div><label className="muted" style={{ fontSize: 11 }}>שם מוצר *</label>
+              <input className="input" value={f.title} onChange={e => upd('title', e.target.value)} placeholder="ג'ק דניאלס דבש ליטר" /></div>
+            <div><label className="muted" style={{ fontSize: 11 }}>ספק</label>
+              <input className="input" value={f.supplier} onChange={e => upd('supplier', e.target.value)} placeholder="אספיריט" /></div>
+            <div><label className="muted" style={{ fontSize: 11 }}>ברקוד</label>
+              <input className="input" value={f.barcode} onChange={e => upd('barcode', e.target.value)} placeholder="82184000328P" /></div>
+            <div><label className="muted" style={{ fontSize: 11 }}>עלות מבצע (₪)</label>
+              <input className="input" type="number" value={f.deal_cost} onChange={e => upd('deal_cost', e.target.value)} placeholder="92" /></div>
+            <div><label className="muted" style={{ fontSize: 11 }}>עלות רגילה (₪)</label>
+              <input className="input" type="number" value={f.regular_cost} onChange={e => upd('regular_cost', e.target.value)} placeholder="110" /></div>
+            <div><label className="muted" style={{ fontSize: 11 }}>מחיר מכירה (₪)</label>
+              <input className="input" type="number" value={f.sell_price} onChange={e => upd('sell_price', e.target.value)} placeholder="145" /></div>
+            <div><label className="muted" style={{ fontSize: 11 }}>כמות מינימום</label>
+              <input className="input" type="number" value={f.min_qty} onChange={e => upd('min_qty', e.target.value)} /></div>
+            <div><label className="muted" style={{ fontSize: 11 }}>תוקף עד</label>
+              <input className="input" type="date" value={f.valid_until} onChange={e => upd('valid_until', e.target.value)} /></div>
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <label className="muted" style={{ fontSize: 11 }}>הערות</label>
+            <input className="input" value={f.notes} onChange={e => upd('notes', e.target.value)} placeholder="ייבוא מקביל, גודל בקבוק..." style={{ width: '100%' }} />
+          </div>
+          <div className="row" style={{ justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+            <button className="btn btn-sm" onClick={() => setShowAdd(false)}>ביטול</button>
+            <button className="btn btn-sm btn-primary" onClick={addDeal} disabled={busy === 'add'}>
+              {busy === 'add' ? 'שומר…' : '✓ הוסף מבצע'}
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {/* הודעת PDF */}
+      <div style={{ background: 'var(--accent-soft)', borderRadius: 8, padding: '10px 16px', marginTop: 10, fontSize: 13, color: 'var(--ink-2)' }}>
+        💡 <b>טיפ:</b> להוספת מבצעים מ-PDF ספק, הנח את הקובץ בתיקייה <code>מבצעים/pdfs/</code> והרץ:
+        <code style={{ display: 'block', marginTop: 4, background: 'var(--bg-1)', padding: '4px 8px', borderRadius: 4, direction: 'ltr', textAlign: 'left' }}>
+          py -X utf8 אוטומציות/parse_supplier_pdf.py
+        </code>
+      </div>
+
+      {/* תצוגת כרטיסים */}
+      {view === 'cards' && (
+        <div className="grid-3" style={{ marginTop: 12 }}>
+          {promos.map((p, i) => (
+            <Card key={i}>
+              <div className="promo-card">
+                <div className="promo-discount">
+                  <div className="promo-discount-num">{p.discount || 0}%</div>
+                  <div className="promo-discount-label">הנחה</div>
+                </div>
+                <div style={{ padding: 18, flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.01em', lineHeight: 1.3 }}>
+                    {p.title}
                   </div>
-                  {p.items > 0 && (
-                    <span className="muted">{p.items} פריטים</span>
-                  )}
-                </div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{p.supplier}</div>
+                  {p.barcode && <div className="muted" style={{ fontSize: 11, marginTop: 2, direction: 'ltr' }}>{p.barcode}</div>}
 
-                <button className="btn btn-sm" style={{ marginTop: 12, width: '100%', justifyContent: 'center' }}>
-                  הזמן עכשיו
-                </button>
+                  <div className="row" style={{ gap: 12, marginTop: 10, fontSize: 13 }}>
+                    {p.deal_cost > 0 && <div><span className="muted">מבצע: </span><b style={{ color: 'var(--accent-strong)' }}>₪{p.deal_cost}</b></div>}
+                    {p.regular_cost > 0 && <div><span className="muted">רגיל: </span><span style={{ textDecoration: 'line-through', color: 'var(--ink-3)' }}>₪{p.regular_cost}</span></div>}
+                  </div>
+
+                  {p.ends && (
+                    <div className="row" style={{ marginTop: 8, fontSize: 12, color: 'var(--ink-3)' }}>
+                      <ICalendar size={13} />
+                      <span>תוקף: {p.ends}</span>
+                    </div>
+                  )}
+
+                  <div className="row" style={{ gap: 6, marginTop: 10 }}>
+                    <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', color: 'var(--danger)' }}
+                            onClick={() => deleteDeal(p)} disabled={busy === (p.barcode || p.title)}>
+                      {busy === (p.barcode || p.title) ? '…' : '✕ מחק'}
+                    </button>
+                  </div>
+                </div>
               </div>
+            </Card>
+          ))}
+          {promos.length === 0 && (
+            <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 40, color: 'var(--ink-3)' }}>
+              {search ? 'אין תוצאות לחיפוש' : 'אין מבצעים פעילים'}
             </div>
-          </Card>
-        );
-      })}
+          )}
+        </div>
+      )}
+
+      {/* תצוגת טבלה */}
+      {view === 'table' && (
+        <Card title={`${promos.length} מבצעים`} sub={search ? 'מסונן' : ''}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>מוצר</th>
+                  <th>ספק</th>
+                  <th>ברקוד</th>
+                  <th style={te}>עלות מבצע</th>
+                  <th style={te}>עלות רגילה</th>
+                  <th style={te}>הנחה</th>
+                  <th style={te}>מחיר מכירה</th>
+                  <th>תוקף</th>
+                  <th style={{ textAlign: 'center' }}>פעולות</th>
+                </tr>
+              </thead>
+              <tbody>
+                {promos.length === 0 ? (
+                  <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, color: 'var(--ink-3)' }}>
+                    {search ? 'אין תוצאות' : 'אין מבצעים'}
+                  </td></tr>
+                ) : promos.map((p, i) => (
+                  <tr key={i}>
+                    <td style={{ fontWeight: 600, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.title}>{p.title}</td>
+                    <td style={{ fontSize: 12 }}>{p.supplier}</td>
+                    <td style={{ fontSize: 11, direction: 'ltr' }}>{p.barcode || '---'}</td>
+                    <td style={{ ...te, fontWeight: 700, color: 'var(--accent-strong)' }}>{fmtCurr(p.deal_cost)}</td>
+                    <td style={{ ...te, color: 'var(--ink-3)', textDecoration: p.regular_cost ? 'line-through' : 'none' }}>{fmtCurr(p.regular_cost)}</td>
+                    <td style={te}>{p.discount > 0 ? <span className="badge ok">{p.discount}%</span> : '---'}</td>
+                    <td style={te}>{fmtCurr(p.sell_price)}</td>
+                    <td style={{ fontSize: 12, color: 'var(--ink-3)' }}>{p.ends || '---'}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button className="btn btn-sm" style={{ color: 'var(--danger)', fontSize: 11 }}
+                              onClick={() => deleteDeal(p)} disabled={busy === (p.barcode || p.title)}>✕</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 Object.assign(window, { Orders, Transfers, Promotions });
