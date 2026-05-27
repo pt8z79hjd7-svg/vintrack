@@ -82,8 +82,13 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
   // ממוצע יומי בחודש (חלוקה לימים פעילים)
   const daysActive = monthRaw.days || 1;
   const avgPerDay = monthTotal / daysActive;
-  // קצב חודשי משוער (avgPerDay × 30)
-  const projectedMonth = avgPerDay * 30;
+  // צפי סוף חודש — ימים שנותרו × קצב יומי
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysLeft = Math.max(0, daysInMonth - now.getDate());
+  const projectedMonth = monthTotal + avgPerDay * daysLeft;
+  const avgProfitPerDay = monthProfit / daysActive;
+  const projectedProfit = monthProfit + avgProfitPerDay * daysLeft;
 
   return (
     <div className="page">
@@ -182,6 +187,67 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
           </div>
         </button>
       </div>
+
+      {/* ─── צפי סוף חודש ─── */}
+      {(() => {
+        const projectedInclVat = Math.round(projectedMonth * VAT);
+        const projectedProfitInclVat = Math.round(projectedProfit);
+        const onTrack = projectedInclVat >= targetInclVat;
+        const pctOfTarget = Math.min(120, (projectedInclVat / targetInclVat) * 100);
+        const gap = targetInclVat - projectedInclVat;
+        const avgDailyNeeded = daysLeft > 0 ? Math.round(gap / daysLeft) : 0;
+        return (
+          <div className="card" style={{
+            padding: '16px 20px',
+            display: 'grid',
+            gridTemplateColumns: '1fr auto 1fr auto 1fr',
+            alignItems: 'center',
+            gap: 16,
+            borderRight: `3px solid ${onTrack ? 'var(--ok)' : 'var(--warn)'}`,
+          }}>
+            <div>
+              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>צפי סוף חודש (כולל מע״מ)</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: onTrack ? 'var(--ok)' : 'var(--warn)', fontVariantNumeric: 'tabular-nums' }}>
+                {fmtCurrency(projectedInclVat)}
+              </div>
+              <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                ללא מע״מ: {fmtCurrency(Math.round(projectedMonth))}
+              </div>
+            </div>
+            <div style={{ width: 1, height: 40, background: 'var(--line)' }} />
+            <div>
+              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>
+                {onTrack ? '✅ בקצב לעמידה ביעד' : '⚠️ מתחת ליעד'}
+              </div>
+              <div style={{ position: 'relative', height: 8, borderRadius: 4, background: 'var(--surface)', overflow: 'hidden' }}>
+                <div style={{
+                  position: 'absolute', inset: '0 auto 0 0',
+                  width: `${Math.min(100, pctOfTarget)}%`,
+                  borderRadius: 4,
+                  background: onTrack
+                    ? 'linear-gradient(90deg, var(--ok), oklch(0.65 0.18 145))'
+                    : 'linear-gradient(90deg, var(--warn), oklch(0.72 0.16 70))',
+                  transition: 'width 0.6s ease'
+                }} />
+              </div>
+              <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                {pctOfTarget.toFixed(0)}% מהיעד ({fmtCurrency(targetInclVat)})
+                {!onTrack && daysLeft > 0 && ` · חסר ${fmtCurrency(Math.abs(gap))} (${fmtCurrency(avgDailyNeeded)}/יום)`}
+              </div>
+            </div>
+            <div style={{ width: 1, height: 40, background: 'var(--line)' }} />
+            <div>
+              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>צפי רווח גולמי</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--ok)', fontVariantNumeric: 'tabular-nums' }}>
+                {fmtCurrency(projectedProfitInclVat)}
+              </div>
+              <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                {daysLeft} ימים נותרים · ממוצע {fmtCurrency(Math.round(avgPerDay * VAT))}/יום
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ─── סיכום מכירות יומי + חודשי מעודכן ─── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
