@@ -1464,6 +1464,26 @@ input, select, textarea { font-family: inherit; }
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
   .kpi-grid, .kpi-grid.kpi-5 { grid-template-columns: repeat(2, 1fr); }
   .order-builder-grid { grid-template-columns: 1fr; }
+
+  /* כל ה-grid templates ב-inline style — נכפה גלילה אופקית במקום חיתוך */
+  div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tbl { min-width: 540px; }
+
+  /* כפתורי טופבר — מסתירים את האינדיקציה הטקסטואלית במובייל (יש כפתור) */
+  .topbar-actions span.muted { display: none; }
+
+  /* page-title ומאקרים — קצת קטן */
+  .page-title { font-size: 18px !important; }
+  .crumbs { font-size: 11px; }
+}
+
+/* breakpoint נוסף לטלפונים קטנים */
+@media (max-width: 480px) {
+  .kpi-grid, .kpi-grid.kpi-5 { grid-template-columns: 1fr; }
+  .chips { overflow-x: auto; flex-wrap: nowrap; }
+  .chip { white-space: nowrap; flex-shrink: 0; }
+  .row { flex-wrap: wrap; }
 }
 
 /* Focus ring */

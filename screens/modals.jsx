@@ -2,7 +2,7 @@
 
 const Modal = ({ onClose, title, children, footer, width }) => (
   <div className="scrim" onClick={onClose}>
-    <div className="modal" style={{ width }} onClick={(e) => e.stopPropagation()}>
+    <div className="modal" style={{ width, maxWidth: 'min(' + (width || '780px') + ', calc(100vw - 24px))' }} onClick={(e) => e.stopPropagation()}>
       <div className="modal-header">
         <div className="modal-title">{title}</div>
         <button className="icon-btn" onClick={onClose}><IClose size={16} /></button>
