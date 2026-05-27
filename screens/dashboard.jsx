@@ -4,20 +4,31 @@ const TARGETS = { revenue: 416667, margin: 25 };
 const fmtCurrency = (v) => `₪${v.toLocaleString('he-IL', { maximumFractionDigits: 0 })}`;
 const fmtCompact = (v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : `${v}`;
 
-const Dashboard = ({ onNav, onOpen }) => {
-  const current = MONTHLY[MONTHLY.length - 1];
-  const prev = MONTHLY[MONTHLY.length - 2];
+const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
+  const _cur = MONTHLY[MONTHLY.length - 1] || { total: 0, mikado: 0, kohav: 0, margin: 0 };
+  const _prev = MONTHLY[MONTHLY.length - 2] || _cur;
+  // לפי בורר הסניף: 'both' = total, 'mikado' / 'kohav' = רק אותו סניף
+  const branchVal = (m) => activeBranch === 'both' ? m.total
+                        : activeBranch === 'mikado' ? m.mikado
+                        : m.kohav;
+  const current = { ..._cur, total: branchVal(_cur) };
+  const prev = { ..._prev, total: branchVal(_prev) };
 
-  const revenueOK = current.total >= TARGETS.revenue;
+  const revenueOK = current.total >= TARGETS.revenue * (activeBranch === 'both' ? 1 : 0.5);
   const marginOK = current.margin >= TARGETS.margin;
 
   const openOrders = ORDERS.filter(o => o.status !== 'completed').length;
   const pendingTransfers = TRANSFERS.filter(t => t.status === 'pending').length;
 
-  const negativeItems = PRODUCTS.filter(p => p.stock.mikado < 0 || p.stock.kohav < 0);
+  // מלאי שלילי מסונן לפי סניף
+  const negativeItems = PRODUCTS.filter(p => {
+    if (activeBranch === 'mikado') return p.stock.mikado < 0;
+    if (activeBranch === 'kohav')  return p.stock.kohav < 0;
+    return p.stock.mikado < 0 || p.stock.kohav < 0;
+  });
   const negativeCats = new Set(negativeItems.map(p => p.cat)).size;
 
-  const revDelta = ((current.total - prev.total) / prev.total) * 100;
+  const revDelta = prev.total ? ((current.total - prev.total) / prev.total) * 100 : 0;
   const marginDelta = current.margin - prev.margin;
 
   const last6 = MONTHLY.slice(-6).map(m => ({
@@ -35,7 +46,9 @@ const Dashboard = ({ onNav, onOpen }) => {
     <div className="page">
       <div className="between">
         <div>
-          <div className="crumbs">סקירה כללית · מאי 2026</div>
+          <div className="crumbs">סקירה כללית · {_cur.m || 'מאי 2026'}
+            {activeBranch !== 'both' && ` · ${activeBranch === 'mikado' ? 'מיקדו' : 'כוכב הצפון'} בלבד`}
+          </div>
           <div className="page-title" style={{ fontSize: 22, marginTop: 4 }}>בוקר טוב 👋</div>
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
             המחזור החודשי {revenueOK ? 'בקצב לעמידה ביעד' : 'מתחת ליעד'} · {openOrders} הזמנות פתוחות · {pendingTransfers} העברות ממתינות

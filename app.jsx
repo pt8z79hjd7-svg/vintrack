@@ -185,17 +185,17 @@ function App() {
           </div>
         </div>
 
-        {tab === 'dashboard' && <Dashboard onNav={handleNav} onOpen={handleOpen} />}
-        {tab === 'inventory' && <Inventory onOpen={handleOpen} onOpenScan={() => setScannerOpen(true)} />}
+        {tab === 'dashboard' && <Dashboard onNav={handleNav} onOpen={handleOpen} activeBranch={activeBranch} />}
+        {tab === 'inventory' && <Inventory onOpen={handleOpen} onOpenScan={() => setScannerOpen(true)} activeBranch={activeBranch} />}
         {tab === 'orders'    && (
           activeSupplier
-            ? <OrderBuilder supplierId={activeSupplier} onBack={() => setActiveSupplier(null)} />
-            : <SupplierHub onSelectSupplier={(id) => setActiveSupplier(id)} />
+            ? <OrderBuilder supplierId={activeSupplier} onBack={() => setActiveSupplier(null)} activeBranch={activeBranch} />
+            : <SupplierHub onSelectSupplier={(id) => setActiveSupplier(id)} activeBranch={activeBranch} />
         )}
-        {tab === 'transfers' && <Transfers />}
-        {tab === 'promos'    && <Promotions />}
-        {tab === 'daily'     && <Daily />}
-        {tab === 'monthly'   && <Monthly />}
+        {tab === 'transfers' && <Transfers activeBranch={activeBranch} />}
+        {tab === 'promos'    && <Promotions activeBranch={activeBranch} />}
+        {tab === 'daily'     && <Daily activeBranch={activeBranch} />}
+        {tab === 'monthly'   && <Monthly activeBranch={activeBranch} />}
         {tab === 'analysis'  && <Analysis activeBranch={activeBranch} />}
         {tab === 'sales'     && <Sales activeBranch={activeBranch} />}
       </main>

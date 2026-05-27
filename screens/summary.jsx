@@ -1,12 +1,25 @@
 // === Daily and Monthly summary screens (חיים מ-Supabase) ===
 
 // === Daily — בחירת תאריך מביאה את נתוני אותו יום ===
-const Daily = () => {
+const Daily = ({ activeBranch = 'both' }) => {
   const byDate = window.DAILY_BY_DATE || {};
   const dates = Object.keys(byDate).sort().reverse();
-  const [date, setDate] = useState(dates[0] || '');
-  const d = byDate[date] || { date, total: 0, mikado: 0, kohav: 0, profit: 0, margin: 0, salesLines: 0, lines: [] };
-  const pct = (x) => d.total ? ((x / d.total) * 100).toFixed(0) : '0';
+  const todayISO = new Date().toISOString().slice(0, 10);
+  // ברירת מחדל: היום (גם אם אין נתונים — נראה הודעה).
+  // אם היום עוד לא ירד — נתחיל מהיום, המשתמש יוכל לרדת ידנית לאחור.
+  const [date, setDate] = useState(todayISO);
+  const lastAvailable = dates[0] || '';
+  const isStale = lastAvailable && lastAvailable < todayISO;
+  const daysBehind = lastAvailable ? Math.floor((new Date(todayISO) - new Date(lastAvailable)) / 86400000) : 0;
+  const raw = byDate[date] || { date, total: 0, mikado: 0, kohav: 0, profit: 0, margin: 0, salesLines: 0, lines: [] };
+  // לפי בורר הסניף: 'both' = total, אחרת רק הסניף הנבחר
+  const branchTotal = activeBranch === 'mikado' ? raw.mikado
+                    : activeBranch === 'kohav'  ? raw.kohav
+                    : raw.total;
+  const branchProfit = activeBranch === 'both' ? raw.profit
+                     : Math.round(raw.profit * (raw.total ? branchTotal / raw.total : 0));
+  const d = { ...raw, total: branchTotal, profit: branchProfit };
+  const pct = (x) => raw.total ? ((x / raw.total) * 100).toFixed(0) : '0';
   const hasData = !!byDate[date];
 
   return (
@@ -17,6 +30,7 @@ const Daily = () => {
           <div className="page-title" style={{ fontSize: 22, marginTop: 4 }}>סיכום יומי</div>
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
             בחר תאריך — הנתונים נטענים מ-{dates.length} ימי פעילות
+            {activeBranch !== 'both' && ` · ${activeBranch === 'mikado' ? 'מיקדו' : 'כוכב הצפון'} בלבד`}
           </div>
         </div>
         <div className="row">
@@ -27,10 +41,26 @@ const Daily = () => {
         </div>
       </div>
 
+      {isStale && (
+        <Card>
+          <div style={{ padding: 14, background: 'var(--warn-soft)', borderRadius: 'var(--r-md)',
+                        display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
+            <span style={{ fontSize: 20 }}>⚠️</span>
+            <div style={{ flex: 1 }}>
+              <strong>נתונים לא עדכניים.</strong> הקובץ האחרון שעובד הוא {lastAvailable} ({daysBehind} ימים אחורה).
+              <br />
+              <span className="muted">המחזור הבא של הורדת מסמכים מ-CashOnTab יקרה בשעה הקרובה (תזמון: 09/12/15/18/21).</span>
+            </div>
+            <button className="btn btn-sm" onClick={() => setDate(lastAvailable)}>קפוץ ליום עם נתונים</button>
+          </div>
+        </Card>
+      )}
       {!hasData && date && (
         <Card>
           <div style={{ padding: 28, textAlign: 'center', color: 'var(--ink-3)' }}>
-            אין נתונים לתאריך זה (יום סגור / טרם נקלט). נסה תאריך אחר.
+            {date === todayISO
+              ? 'אין עדיין נתונים להיום (הורדת המסמכים תרוץ אוטומטית בשעה הקרובה).'
+              : 'אין נתונים לתאריך זה (יום סגור / טרם נקלט). נסה תאריך אחר.'}
           </div>
         </Card>
       )}
@@ -38,28 +68,36 @@ const Daily = () => {
       {/* Totals */}
       <div className="kpi-grid">
         <div className="kpi">
-          <div className="kpi-label"><span className="kpi-icon"><ICoin size={16} /></span>מחזור כולל (ללא מע״מ)</div>
+          <div className="kpi-label"><span className="kpi-icon"><ICoin size={16} /></span>
+            {activeBranch === 'both' ? 'מחזור כולל' : (activeBranch === 'mikado' ? 'מחזור מיקדו' : 'מחזור כוכב')} (ללא מע״מ)
+          </div>
           <div className="kpi-value">{fmtCurrency(d.total)}</div>
           <div className="kpi-foot">{d.salesLines} שורות מכירה</div>
         </div>
-        <div className="kpi">
-          <div className="kpi-label">
-            <span className="kpi-icon" style={{ background: 'color-mix(in oklch, ' + BRANCHES[0].color + ' 18%, transparent)', color: BRANCHES[0].color }}><IBox size={16} /></span>
-            מיקדו
+        {(activeBranch === 'both' || activeBranch === 'mikado') && (
+          <div className="kpi">
+            <div className="kpi-label">
+              <span className="kpi-icon" style={{ background: 'color-mix(in oklch, ' + BRANCHES[0].color + ' 18%, transparent)', color: BRANCHES[0].color }}><IBox size={16} /></span>
+              מיקדו
+            </div>
+            <div className="kpi-value">{fmtCurrency(raw.mikado)}</div>
+            <div className="kpi-foot">{pct(raw.mikado)}% מהמחזור</div>
           </div>
-          <div className="kpi-value">{fmtCurrency(d.mikado)}</div>
-          <div className="kpi-foot">{pct(d.mikado)}% מהמחזור</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">
-            <span className="kpi-icon" style={{ background: 'color-mix(in oklch, ' + BRANCHES[1].color + ' 18%, transparent)', color: BRANCHES[1].color }}><IBox size={16} /></span>
-            כוכב הצפון
+        )}
+        {(activeBranch === 'both' || activeBranch === 'kohav') && (
+          <div className="kpi">
+            <div className="kpi-label">
+              <span className="kpi-icon" style={{ background: 'color-mix(in oklch, ' + BRANCHES[1].color + ' 18%, transparent)', color: BRANCHES[1].color }}><IBox size={16} /></span>
+              כוכב הצפון
+            </div>
+            <div className="kpi-value">{fmtCurrency(raw.kohav)}</div>
+            <div className="kpi-foot">{pct(raw.kohav)}% מהמחזור</div>
           </div>
-          <div className="kpi-value">{fmtCurrency(d.kohav)}</div>
-          <div className="kpi-foot">{pct(d.kohav)}% מהמחזור</div>
-        </div>
+        )}
         <div className="kpi">
-          <div className="kpi-label"><span className="kpi-icon ok"><IPercent size={16} /></span>רווח גולמי</div>
+          <div className="kpi-label"><span className="kpi-icon ok"><IPercent size={16} /></span>
+            רווח גולמי{activeBranch !== 'both' && ' (מחושב יחסית)'}
+          </div>
           <div className="kpi-value">{fmtCurrency(d.profit)}</div>
           <div className="kpi-foot" style={{ color: 'var(--ok)', fontWeight: 600 }}>מרווח {Number(d.margin).toFixed(1)}%</div>
         </div>
@@ -76,12 +114,19 @@ const Daily = () => {
 };
 
 // === Monthly — בחירת טווח חודשים ===
-const Monthly = () => {
+const Monthly = ({ activeBranch = 'both' }) => {
   const all = window.MONTHLY || [];
   const [from, setFrom] = useState(0);
   const [to, setTo] = useState(Math.max(0, all.length - 1));
   const lo = Math.min(from, to), hi = Math.max(from, to);
   const sel = all.slice(lo, hi + 1);
+  // לפי בורר הסניף — הגרף מציג את העמודה הרלוונטית בלבד
+  const keys = activeBranch === 'mikado' ? ['mikado']
+             : activeBranch === 'kohav'  ? ['kohav']
+             : ['mikado', 'kohav'];
+  const colors = activeBranch === 'mikado' ? [BRANCHES[0].color]
+               : activeBranch === 'kohav'  ? [BRANCHES[1].color]
+               : [BRANCHES[0].color, BRANCHES[1].color];
   const data = sel.map((m) => ({ label: m.m.split(' ')[0], mikado: m.mikado, kohav: m.kohav }));
 
   return (
@@ -110,17 +155,20 @@ const Monthly = () => {
         </div>
       </div>
 
-      <Card title="מחזור חודשי לפי סניף" sub="ללא מע״מ · ₪"
+      <Card title={`מחזור חודשי${activeBranch === 'both' ? ' לפי סניף' : (activeBranch === 'mikado' ? ' — מיקדו בלבד' : ' — כוכב הצפון בלבד')}`} sub="ללא מע״מ · ₪"
         action={
           <div className="row" style={{ gap: 14, fontSize: 12 }}>
-            <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: BRANCHES[0].color }} />מיקדו</span>
-            <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: BRANCHES[1].color }} />כוכב הצפון</span>
+            {(activeBranch === 'both' || activeBranch === 'mikado') && (
+              <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: BRANCHES[0].color }} />מיקדו</span>
+            )}
+            {(activeBranch === 'both' || activeBranch === 'kohav') && (
+              <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: BRANCHES[1].color }} />כוכב הצפון</span>
+            )}
           </div>
         }>
         <div style={{ padding: 16 }}>
           {data.length ? (
-            <GroupedBarChart data={data} keys={['mikado', 'kohav']}
-              colors={[BRANCHES[0].color, BRANCHES[1].color]} fmt={(v) => fmtCompact(Math.round(v))} height={260} />
+            <GroupedBarChart data={data} keys={keys} colors={colors} fmt={(v) => fmtCompact(Math.round(v))} height={260} />
           ) : <div style={{ padding: 30, textAlign: 'center', color: 'var(--ink-3)' }}>אין נתונים בטווח.</div>}
         </div>
       </Card>

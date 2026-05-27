@@ -2,20 +2,36 @@
 
 const PAGE_SIZE = 12;
 
-const Inventory = ({ onOpen, onOpenScan }) => {
+const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
   const [cat, setCat] = useState('all');
   const [sup, setSup] = useState('all');
   const [stock, setStock] = useState('all');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
+  React.useEffect(() => { setPage(1); }, [activeBranch]);
+
+  // מלאי לפי סניף — לסינון/מיון/הצגה
+  const branchStock = (p) => {
+    if (activeBranch === 'mikado') return p.stock.mikado;
+    if (activeBranch === 'kohav')  return p.stock.kohav;
+    return p.stock.mikado + p.stock.kohav;
+  };
+  const branchNeg = (p) => {
+    if (activeBranch === 'mikado') return p.stock.mikado < 0;
+    if (activeBranch === 'kohav')  return p.stock.kohav < 0;
+    return p.stock.mikado < 0 || p.stock.kohav < 0;
+  };
 
   // Search matches main SKU OR parallel import SKU
   const filtered = useMemo(() => {
     return PRODUCTS.filter(p => {
       if (cat !== 'all' && p.cat !== cat) return false;
       if (sup !== 'all' && p.supplier !== sup && p.parallel?.supplier !== sup) return false;
-      if (stock === 'low' && p.total >= 10) return false;
-      if (stock === 'negative' && p.stock.mikado >= 0 && p.stock.kohav >= 0) return false;
+      const bs = branchStock(p);
+      if (stock === 'low' && bs >= 10) return false;
+      if (stock === 'negative' && !branchNeg(p)) return false;
+      // בסניף יחיד — לא להציג מוצרים שאין להם מלאי שם (לא פעיל / 0)
+      if (activeBranch !== 'both' && bs === 0 && stock === 'all') return false;
       if (q) {
         const Q = q.toLowerCase();
         const matchMain = p.name.toLowerCase().includes(Q) || p.sku.includes(q);
@@ -24,14 +40,13 @@ const Inventory = ({ onOpen, onOpenScan }) => {
       }
       return true;
     });
-  }, [cat, sup, stock, q]);
+  }, [cat, sup, stock, q, activeBranch]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const fakeTotalCount = 1400 - (PRODUCTS.length - filtered.length);
 
-  // Negative items count
-  const negCount = PRODUCTS.filter(p => p.stock.mikado < 0 || p.stock.kohav < 0).length;
+  // Negative items count — לפי סניף נבחר
+  const negCount = PRODUCTS.filter(branchNeg).length;
 
   return (
     <div className="page">
@@ -40,7 +55,8 @@ const Inventory = ({ onOpen, onOpenScan }) => {
           <div className="crumbs">מלאי · 2 סניפים</div>
           <div className="page-title" style={{ fontSize: 22, marginTop: 4 }}>מלאי מוצרים</div>
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            {fakeTotalCount.toLocaleString('he-IL')} מוצרים פעילים · {negCount} עם מלאי שלילי
+            {filtered.length.toLocaleString('he-IL')} מוצרים תואמי סינון · {negCount} עם מלאי שלילי
+            {activeBranch !== 'both' && ` · ${activeBranch === 'mikado' ? 'מיקדו' : 'כוכב הצפון'} בלבד`}
           </div>
         </div>
         <div className="row">
@@ -121,14 +137,18 @@ const Inventory = ({ onOpen, onOpenScan }) => {
                 <th>קטגוריה</th>
                 <th>ספק</th>
                 <th style={{ textAlign: 'end' }}>מחיר צרכן</th>
-                <th style={{ textAlign: 'center' }}>
-                  <span className="branch-dot" style={{ background: BRANCHES[0].color }} />
-                  מיקדו
-                </th>
-                <th style={{ textAlign: 'center' }}>
-                  <span className="branch-dot" style={{ background: BRANCHES[1].color }} />
-                  כוכב
-                </th>
+                {(activeBranch === 'both' || activeBranch === 'mikado') && (
+                  <th style={{ textAlign: 'center' }}>
+                    <span className="branch-dot" style={{ background: BRANCHES[0].color }} />
+                    מיקדו
+                  </th>
+                )}
+                {(activeBranch === 'both' || activeBranch === 'kohav') && (
+                  <th style={{ textAlign: 'center' }}>
+                    <span className="branch-dot" style={{ background: BRANCHES[1].color }} />
+                    כוכב
+                  </th>
+                )}
                 <th style={{ textAlign: 'center' }}>סה״כ</th>
               </tr>
             </thead>
@@ -136,8 +156,10 @@ const Inventory = ({ onOpen, onOpenScan }) => {
               {pageItems.map(p => {
                 const catLabel = CATEGORIES.find(c => c.id === p.cat)?.label;
                 const supName = SUPPLIERS.find(s => s.id === p.supplier)?.name;
-                const totalStock = p.stock.mikado + p.stock.kohav + (p.parallel ? p.parallel.stock.mikado + p.parallel.stock.kohav : 0);
-                const negative = p.stock.mikado < 0 || p.stock.kohav < 0;
+                const totalStock = activeBranch === 'mikado' ? p.stock.mikado
+                                : activeBranch === 'kohav'  ? p.stock.kohav
+                                : p.stock.mikado + p.stock.kohav + (p.parallel ? p.parallel.stock.mikado + p.parallel.stock.kohav : 0);
+                const negative = branchNeg(p);
                 return (
                   <tr key={p.id} onClick={() => onOpen('detail', p)} className={negative ? 'row-neg' : ''}>
                     <td onClick={(e) => e.stopPropagation()}><input type="checkbox" /></td>
@@ -166,12 +188,16 @@ const Inventory = ({ onOpen, onOpenScan }) => {
                     <td style={{ textAlign: 'end', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                       ₪{p.price.toFixed(2)}
                     </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <StockCell value={p.stock.mikado} />
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <StockCell value={p.stock.kohav} />
-                    </td>
+                    {(activeBranch === 'both' || activeBranch === 'mikado') && (
+                      <td style={{ textAlign: 'center' }}>
+                        <StockCell value={p.stock.mikado} />
+                      </td>
+                    )}
+                    {(activeBranch === 'both' || activeBranch === 'kohav') && (
+                      <td style={{ textAlign: 'center' }}>
+                        <StockCell value={p.stock.kohav} />
+                      </td>
+                    )}
                     <td style={{ textAlign: 'center', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                       {totalStock}
                     </td>
@@ -180,7 +206,7 @@ const Inventory = ({ onOpen, onOpenScan }) => {
               })}
               {pageItems.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: 40, color: 'var(--ink-3)' }}>
+                  <td colSpan={activeBranch === 'both' ? 9 : 8} style={{ textAlign: 'center', padding: 40, color: 'var(--ink-3)' }}>
                     לא נמצאו מוצרים. נסה לשנות פילטרים.
                   </td>
                 </tr>
@@ -197,7 +223,6 @@ const Inventory = ({ onOpen, onOpenScan }) => {
         }}>
           <span>
             מוצג {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} מתוך {filtered.length}
-            <span className="muted"> · סה״כ במערכת {fakeTotalCount.toLocaleString('he-IL')}</span>
           </span>
           <div className="row">
             <button className="btn btn-sm btn-ghost"
