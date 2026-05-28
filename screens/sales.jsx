@@ -1,5 +1,5 @@
 // === מכירות / מובילים — 30 המובילים ב-3 חתכים ===
-const Sales = ({ activeBranch = 'both' }) => {
+const Sales = ({ activeBranch = 'both', onOpen }) => {
   useLiveData();   // re-render אחרי refreshData
   const P = (window.PRODUCTS || []).filter((p) => p.total > 0 || (p.weekly || 0) > 0);
   // מחיר אפקטיבי = ממוצע משוקלל 30 ימים (כולל מבצעים). fallback למחיר רשמי
@@ -39,7 +39,7 @@ const Sales = ({ activeBranch = 'both' }) => {
             const he = hasEff(p);
             const em = effMargin(p);
             return (
-              <tr key={p.id}>
+              <tr key={p.id} onClick={() => onOpen?.('detail', p)} style={{ cursor: onOpen ? 'pointer' : 'default' }}>
                 <td style={{ color: 'var(--ink-3)', fontWeight: 700 }}>{i + 1}</td>
                 <td style={{ fontWeight: 600 }}>
                   {p.name}

@@ -469,7 +469,7 @@ const OrderBuilder = ({ supplierId, onBack }) => {
             <div className="between" style={{ fontSize: 16, paddingTop: 8, borderTop: '1px solid var(--line)' }}>
               <span style={{ fontWeight: 700 }}>סה״כ</span>
               <span style={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: 'var(--accent-strong)' }}>
-                ₪{(cartTotal * 1.17).toFixed(2)}
+                ₪{(cartTotal * 1.18).toFixed(2)}
               </span>
             </div>
           </div>
@@ -535,7 +535,7 @@ const WhatsAppExportModal = ({ supplier, items, total, branch, onClose }) => {
     `סה״כ פריטים: ${items.length}`,
     `סה״כ יחידות: ${items.reduce((a, x) => a + x.qty, 0)}`,
     `סה״כ לפני מע״מ: ₪${total.toFixed(2)}`,
-    `*סה״כ כולל מע״מ: ₪${(total * 1.17).toFixed(2)}*`,
+    `*סה״כ כולל מע״מ: ₪${(total * 1.18).toFixed(2)}*`,
     ``,
     `תודה! 🙏`,
   ].join('\n');
@@ -682,13 +682,13 @@ const PdfExportModal = ({ supplier, items, total, branch, onClose }) => {
             </span>
           </div>
           <div className="between">
-            <span>מע״מ 17%:</span>
-            <span style={{ fontVariantNumeric: 'tabular-nums' }}>₪{(total * 0.17).toFixed(2)}</span>
+            <span>מע״מ 18%:</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>₪{(total * 0.18).toFixed(2)}</span>
           </div>
           <div className="between" style={{ borderTop: '2px solid var(--ink)', paddingTop: 6, fontSize: 16 }}>
             <span style={{ fontWeight: 800 }}>סה״כ לתשלום:</span>
             <span style={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
-              ₪{(total * 1.17).toFixed(2)}
+              ₪{(total * 1.18).toFixed(2)}
             </span>
           </div>
         </div>

@@ -1,19 +1,17 @@
 // === Daily and Monthly summary screens (חיים מ-Supabase) ===
 
 // === Daily — בחירת תאריך מביאה את נתוני אותו יום ===
-const Daily = ({ activeBranch = 'both' }) => {
+const Daily = ({ activeBranch = 'both', onOpen }) => {
   useLiveData();   // re-render אחרי refreshData
   const byDate = window.DAILY_BY_DATE || {};
   const dates = Object.keys(byDate).sort().reverse();
+  const allDatesAsc = Object.keys(byDate).sort();
   const todayISO = new Date().toISOString().slice(0, 10);
-  // ברירת מחדל: היום (גם אם אין נתונים — נראה הודעה).
-  // אם היום עוד לא ירד — נתחיל מהיום, המשתמש יוכל לרדת ידנית לאחור.
   const [date, setDate] = useState(todayISO);
   const lastAvailable = dates[0] || '';
   const isStale = lastAvailable && lastAvailable < todayISO;
   const daysBehind = lastAvailable ? Math.floor((new Date(todayISO) - new Date(lastAvailable)) / 86400000) : 0;
   const raw = byDate[date] || { date, total: 0, mikado: 0, kohav: 0, profit: 0, margin: 0, salesLines: 0, lines: [] };
-  // לפי בורר הסניף: 'both' = total, אחרת רק הסניף הנבחר
   const branchTotal = activeBranch === 'mikado' ? raw.mikado
                     : activeBranch === 'kohav'  ? raw.kohav
                     : raw.total;
@@ -23,6 +21,25 @@ const Daily = ({ activeBranch = 'both' }) => {
   const pct = (x) => raw.total ? ((x / raw.total) * 100).toFixed(0) : '0';
   const hasData = !!byDate[date];
 
+  // ניווט בין תאריכים — חיצי קדימה/אחורה
+  const goDay = (delta) => {
+    const cur = new Date(date + 'T00:00:00');
+    cur.setDate(cur.getDate() + delta);
+    setDate(cur.toISOString().slice(0, 10));
+  };
+  const goPrevAvail = () => {
+    const prev = allDatesAsc.filter(d => d < date).pop();
+    if (prev) setDate(prev);
+  };
+  const goNextAvail = () => {
+    const next = allDatesAsc.find(d => d > date);
+    if (next) setDate(next);
+  };
+  const fmtHeb = (iso) => {
+    try { return new Date(iso + 'T00:00:00').toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'short' }); }
+    catch { return iso; }
+  };
+
   return (
     <div className="page">
       <div className="between">
@@ -31,18 +48,29 @@ const Daily = ({ activeBranch = 'both' }) => {
             {date === todayISO && hasData && <span style={{ marginInlineStart: 8, color: 'var(--ok)' }}>● חי (יתעדכן בשעה הקרובה)</span>}
           </div>
           <div className="page-title" style={{ fontSize: 22, marginTop: 4 }}>
-            סיכום יומי {date === todayISO && hasData && <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink-3)', marginInlineStart: 8 }}>מכירות עד עכשיו</span>}
+            סיכום יומי — {fmtHeb(date)}
+            {date === todayISO && hasData && <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--ok)', marginInlineStart: 8 }}>● חי</span>}
           </div>
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            בחר תאריך — הנתונים נטענים מ-{dates.length} ימי פעילות
+            {dates.length} ימי פעילות · השתמש בחצים לניווט
             {activeBranch !== 'both' && ` · ${activeBranch === 'mikado' ? 'מיקדו' : 'כוכב הצפון'} בלבד`}
           </div>
         </div>
-        <div className="row">
-          <div className="date-picker">
+        <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+          <button className="btn btn-sm btn-ghost" onClick={goPrevAvail} title="יום קודם עם נתונים"
+                  style={{ padding: '6px 8px', fontSize: 16 }}>⏮</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => goDay(-1)} title="יום קודם"
+                  style={{ padding: '6px 10px', fontSize: 16 }}>◀</button>
+          <div className="date-picker" style={{ minWidth: 140, textAlign: 'center' }}>
             <ICalendar size={15} />
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
+          <button className="btn btn-sm btn-ghost" onClick={() => goDay(1)} title="יום הבא"
+                  disabled={date >= todayISO} style={{ padding: '6px 10px', fontSize: 16 }}>▶</button>
+          <button className="btn btn-sm btn-ghost" onClick={goNextAvail} title="יום הבא עם נתונים"
+                  disabled={date >= todayISO} style={{ padding: '6px 8px', fontSize: 16 }}>⏭</button>
+          <button className="btn btn-sm" onClick={() => setDate(todayISO)} title="היום"
+                  style={{ padding: '6px 12px', fontSize: 12 }}>היום</button>
         </div>
       </div>
 

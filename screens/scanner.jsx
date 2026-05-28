@@ -1,125 +1,264 @@
-// === Barcode scanner modal — camera view (mock) ===
-// Production: integrate html5-qrcode or quagga2:
-//   <script src="https://unpkg.com/html5-qrcode"></script>
-//   new Html5Qrcode("reader").start({facingMode:"environment"}, {...},
-//     (decoded) => { findProduct(decoded); }, () => {});
-// Search must match BOTH main SKU and parallel.sku.
+// === Barcode scanner — real camera via html5-qrcode + manual input ===
+// Requires: <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
 const ScannerModal = ({ onClose, onFound }) => {
-  const [state, setState] = useState('scanning'); // scanning | found | notfound
+  const [state, setState] = useState('init'); // init | scanning | found | notfound | manual | error
   const [scanned, setScanned] = useState(null);
+  const [manualCode, setManualCode] = useState('');
+  const [errMsg, setErrMsg] = useState('');
+  const scannerRef = useRef(null);
+  const containerRef = useRef(null);
 
-  // Simulate scan after delay
+  // חיפוש מוצר לפי ברקוד — גם ראשי וגם ייבוא מקביל
+  const findProduct = useCallback((code) => {
+    const norm = code.replace(/^0+/, '') || '0';
+    const P = window.PRODUCTS || [];
+    // חפש ב-sku (ברקוד ראשי)
+    let p = P.find(x => x.sku === code || x.sku === norm);
+    let usedParallel = false;
+    // חפש ב-parallel.sku (ייבוא מקביל)
+    if (!p) {
+      p = P.find(x => x.parallel && (x.parallel.sku === code || x.parallel.sku === norm));
+      if (p) usedParallel = true;
+    }
+    // חפש ב-extra_barcodes
+    if (!p) {
+      p = P.find(x => (x.extra_barcodes || []).some(eb => eb === code || eb === norm));
+    }
+    // ניסיון נוסף: הוסף/הסר אפסים מובילים
+    if (!p) {
+      const padded = code.padStart(13, '0');
+      p = P.find(x => x.sku === padded || (x.parallel && x.parallel.sku === padded));
+      if (p && !usedParallel) usedParallel = !!(p.parallel && p.parallel.sku === padded);
+    }
+    return { product: p, code, usedParallel };
+  }, []);
+
+  // הפעלת מצלמה
   useEffect(() => {
-    if (state !== 'scanning') return;
-    const timer = setTimeout(() => {
-      // Randomly pick a product (sometimes a parallel-import sku)
-      const useParallel = Math.random() > 0.6;
-      const candidates = useParallel ? PRODUCTS.filter(p => p.parallel) : PRODUCTS;
-      const p = candidates[Math.floor(Math.random() * candidates.length)];
-      const code = useParallel ? p.parallel.sku : p.sku;
-      const usedParallel = useParallel;
-      setScanned({ product: p, code, usedParallel });
-      setState('found');
-    }, 2400);
-    return () => clearTimeout(timer);
-  }, [state]);
+    if (state !== 'init') return;
+    if (!window.Html5Qrcode) {
+      setErrMsg('ספריית הסריקה לא נטענה. נסה לרענן את הדף.');
+      setState('error');
+      return;
+    }
 
-  const tryAgain = () => { setScanned(null); setState('scanning'); };
+    const startCamera = async () => {
+      try {
+        const scanner = new Html5Qrcode('scanner-reader');
+        scannerRef.current = scanner;
+
+        await scanner.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 120 },
+            aspectRatio: 1.0,
+            formatsToSupport: [
+              Html5QrcodeSupportedFormats.EAN_13,
+              Html5QrcodeSupportedFormats.EAN_8,
+              Html5QrcodeSupportedFormats.CODE_128,
+              Html5QrcodeSupportedFormats.CODE_39,
+              Html5QrcodeSupportedFormats.UPC_A,
+              Html5QrcodeSupportedFormats.UPC_E,
+            ],
+          },
+          (decoded) => {
+            // נמצא ברקוד!
+            const result = findProduct(decoded);
+            setScanned(result);
+            setState(result.product ? 'found' : 'notfound');
+            // עצור מצלמה
+            scanner.stop().catch(() => {});
+          },
+          () => {} // scan failure — ignore, keep trying
+        );
+        setState('scanning');
+      } catch (err) {
+        console.warn('Camera error:', err);
+        if (String(err).includes('NotAllowedError') || String(err).includes('Permission')) {
+          setErrMsg('לא ניתנה הרשאת מצלמה. אשר גישה למצלמה ונסה שוב, או הקלד ברקוד ידנית.');
+        } else if (String(err).includes('NotFoundError')) {
+          setErrMsg('לא נמצאה מצלמה במכשיר. הקלד ברקוד ידנית.');
+        } else {
+          setErrMsg('שגיאה בהפעלת מצלמה: ' + String(err).slice(0, 100));
+        }
+        setState('manual');
+      }
+    };
+
+    // delay קצר כדי שה-DOM ייווצר
+    const tid = setTimeout(startCamera, 300);
+    return () => {
+      clearTimeout(tid);
+      if (scannerRef.current) {
+        scannerRef.current.stop().catch(() => {});
+        scannerRef.current = null;
+      }
+    };
+  }, [state, findProduct]);
+
+  // ניקוי בסגירה
+  const handleClose = () => {
+    if (scannerRef.current) {
+      scannerRef.current.stop().catch(() => {});
+      scannerRef.current = null;
+    }
+    onClose();
+  };
+
+  // חיפוש ידני
+  const handleManualSearch = () => {
+    const code = manualCode.trim();
+    if (!code) return;
+    const result = findProduct(code);
+    setScanned(result);
+    setState(result.product ? 'found' : 'notfound');
+  };
+
+  // סרוק שוב
+  const tryAgain = () => {
+    setScanned(null);
+    setManualCode('');
+    setState('init');
+  };
+
+  // בדוק אם מוצר חדש (חסר מחיר)
+  const isNewProduct = scanned?.product && (!scanned.product.cost || scanned.product.cost <= 0 || !scanned.product.price || scanned.product.price <= 0);
+  const approved = window.APPROVED_PRODUCTS || new Set();
+  const isUnapproved = scanned?.product && !approved.has(scanned.product.sku);
 
   return (
-    <div className="scrim" onClick={onClose}>
-      <div className="scanner-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="scrim" onClick={handleClose}>
+      <div className="scanner-modal" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflow: 'auto' }}>
         <div className="scanner-header">
           <div className="row">
             <ICamera size={18} />
             <span style={{ fontWeight: 700 }}>סריקת ברקוד</span>
           </div>
-          <button className="icon-btn" onClick={onClose}><IClose size={16} /></button>
+          <button className="icon-btn" onClick={handleClose}><IClose size={16} /></button>
         </div>
 
         <div className="scanner-stage">
           {/* Camera viewfinder */}
-          <div className="scanner-camera">
-            <div className="scanner-blur" />
-            <div className={`scanner-frame ${state}`}>
-              <div className="scanner-frame-corners">
-                <span className="c c-tl" /><span className="c c-tr" />
-                <span className="c c-bl" /><span className="c c-br" />
-              </div>
-              {state === 'scanning' && <div className="scanner-laser" />}
-              {state === 'found' && (
-                <div className="scanner-checkmark">
-                  <ICheck size={42} />
+          {(state === 'init' || state === 'scanning') && (
+            <div className="scanner-camera" ref={containerRef}>
+              <div id="scanner-reader" style={{ width: '100%', minHeight: 260 }} />
+              {state === 'init' && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', color: 'white', fontSize: 14 }}>
+                  מפעיל מצלמה...
                 </div>
               )}
             </div>
-            <div className="scanner-overlay-text">
-              {state === 'scanning' && 'הצמד את הברקוד למסגרת'}
-              {state === 'found' && 'נמצא!'}
+          )}
+
+          {/* שגיאה */}
+          {state === 'error' && (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--danger)' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>📷</div>
+              <div>{errMsg}</div>
             </div>
-          </div>
+          )}
 
-          {/* Result */}
-          <div className="scanner-result">
-            {state === 'scanning' && (
-              <div className="muted" style={{ fontSize: 13, textAlign: 'center', padding: 16 }}>
-                סורק... תומך ב-EAN-13, EAN-8, Code-128
+          {/* הקלדה ידנית */}
+          {(state === 'manual' || state === 'scanning' || state === 'init') && (
+            <div style={{ padding: 16, borderTop: '1px solid var(--line)' }}>
+              {errMsg && state === 'manual' && (
+                <div style={{ fontSize: 12, color: 'var(--warn)', marginBottom: 8 }}>{errMsg}</div>
+              )}
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                {state === 'scanning' ? 'או הקלד ברקוד ידנית:' : 'הקלד ברקוד:'}
               </div>
-            )}
+              <div className="row" style={{ gap: 8 }}>
+                <input
+                  className="input"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9P]*"
+                  placeholder="לדוגמה: 7290000000"
+                  value={manualCode}
+                  onChange={(e) => setManualCode(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleManualSearch()}
+                  style={{ flex: 1, fontSize: 16, padding: '10px 14px', direction: 'ltr', textAlign: 'left' }}
+                  autoFocus={state === 'manual'}
+                />
+                <button className="btn btn-primary" onClick={handleManualSearch}
+                        style={{ padding: '10px 20px', fontSize: 14 }}
+                        disabled={!manualCode.trim()}>
+                  חפש
+                </button>
+              </div>
+            </div>
+          )}
 
-            {state === 'found' && scanned && (
-              <div>
-                <div className="row" style={{ marginBottom: 10 }}>
-                  <Badge tone="ok"><ICheck size={11} /> זוהה</Badge>
-                  {scanned.usedParallel && (
-                    <Badge tone="default"><ISplit size={11} /> ייבוא מקביל</Badge>
-                  )}
-                </div>
-                <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
-                  <div className="bottle-thumb">
-                    <div className="bottle-thumb-cap" />
-                    <div className="bottle-thumb-body" data-cat={scanned.product.cat} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>{scanned.product.name}</div>
-                    <div className="mono-tiny" style={{ marginTop: 2 }}>
-                      ברקוד: {scanned.code}
-                      {scanned.usedParallel && <span className="muted"> · ספק משני</span>}
-                    </div>
-                    <div className="row" style={{ marginTop: 8, gap: 10, fontSize: 12 }}>
-                      <span>
-                        מיקדו: <strong>{scanned.product.stock.mikado}</strong>
-                      </span>
-                      <span>·</span>
-                      <span>
-                        כוכב: <strong>{scanned.product.stock.kohav}</strong>
-                      </span>
-                      <span>·</span>
-                      <span>
-                        ₪<strong>{scanned.product.price.toFixed(2)}</strong>
-                      </span>
-                    </div>
-                  </div>
-                </div>
+          {/* תוצאה — נמצא */}
+          {state === 'found' && scanned?.product && (
+            <div className="scanner-result" style={{ padding: 16 }}>
+              <div className="row" style={{ marginBottom: 10, gap: 6 }}>
+                <Badge tone="ok"><ICheck size={11} /> זוהה</Badge>
+                {scanned.usedParallel && <Badge tone="default">ייבוא מקביל</Badge>}
+                {isNewProduct && <Badge tone="warn">חסר מחיר</Badge>}
+                {isUnapproved && <Badge tone="accent">ממתין לאישור</Badge>}
               </div>
-            )}
-          </div>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{scanned.product.name}</div>
+              <div className="mono-tiny" style={{ marginBottom: 8, direction: 'ltr', textAlign: 'left' }}>
+                ברקוד: {scanned.code}
+              </div>
+              <div className="row" style={{ gap: 14, fontSize: 13, flexWrap: 'wrap' }}>
+                <span>מיקדו: <strong>{scanned.product.stock?.mikado ?? 0}</strong></span>
+                <span>כוכב: <strong>{scanned.product.stock?.kohav ?? 0}</strong></span>
+                {scanned.product.price > 0 && <span>מחיר: <strong>₪{scanned.product.price.toFixed(0)}</strong></span>}
+                {scanned.product.cost > 0 && <span>עלות: <strong>₪{scanned.product.cost.toFixed(0)}</strong></span>}
+              </div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                ספק: {scanned.product.supplier}
+                {scanned.product.category && ` · ${scanned.product.category}`}
+              </div>
+            </div>
+          )}
+
+          {/* תוצאה — לא נמצא */}
+          {state === 'notfound' && (
+            <div className="scanner-result" style={{ padding: 20, textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 8 }}>🔍</div>
+              <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--warn)', marginBottom: 4 }}>
+                ברקוד לא נמצא במלאי
+              </div>
+              <div className="mono-tiny" style={{ marginBottom: 12, direction: 'ltr' }}>
+                {scanned?.code}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>
+                המוצר לא קיים במערכת. בדוק את הברקוד או הוסף מוצר חדש.
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="scanner-footer">
-          {state === 'scanning' && (
-            <>
-              <button className="btn btn-ghost" onClick={onClose}>ביטול</button>
-              <button className="btn">הזן ברקוד ידנית</button>
-            </>
+          {(state === 'scanning' || state === 'init') && (
+            <button className="btn btn-ghost" onClick={handleClose}>ביטול</button>
           )}
-          {state === 'found' && scanned && (
+
+          {state === 'found' && scanned?.product && (
             <>
               <button className="btn" onClick={tryAgain}>סרוק שוב</button>
-              <button className="btn btn-primary" onClick={() => { onFound(scanned.product); onClose(); }}>
+              <button className="btn btn-primary" onClick={() => { onFound(scanned.product); handleClose(); }}>
                 פתח כרטיס מוצר →
               </button>
+            </>
+          )}
+
+          {state === 'notfound' && (
+            <>
+              <button className="btn" onClick={tryAgain}>סרוק שוב</button>
+              <button className="btn" onClick={() => setState('manual')}>הקלד ברקוד אחר</button>
+            </>
+          )}
+
+          {(state === 'error' || state === 'manual') && (
+            <>
+              <button className="btn btn-ghost" onClick={handleClose}>סגור</button>
+              <button className="btn" onClick={tryAgain}>נסה מצלמה שוב</button>
             </>
           )}
         </div>

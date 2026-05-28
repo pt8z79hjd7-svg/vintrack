@@ -178,12 +178,12 @@ function App() {
             ? <OrderBuilder supplierId={activeSupplier} onBack={() => setActiveSupplier(null)} activeBranch={activeBranch} />
             : <SupplierHub onSelectSupplier={(id) => setActiveSupplier(id)} activeBranch={activeBranch} />
         )}
-        {tab === 'transfers' && <Transfers activeBranch={activeBranch} />}
+        {tab === 'transfers' && <Transfers activeBranch={activeBranch} onOpen={handleOpen} />}
         {tab === 'promos'    && <Promotions activeBranch={activeBranch} />}
-        {tab === 'daily'     && <Daily activeBranch={activeBranch} />}
+        {tab === 'daily'     && <Daily activeBranch={activeBranch} onOpen={handleOpen} />}
         {tab === 'monthly'   && <Monthly activeBranch={activeBranch} />}
-        {tab === 'analysis'      && <Analysis activeBranch={activeBranch} />}
-        {tab === 'sales'         && <Sales activeBranch={activeBranch} />}
+        {tab === 'analysis'      && <Analysis activeBranch={activeBranch} onOpen={handleOpen} />}
+        {tab === 'sales'         && <Sales activeBranch={activeBranch} onOpen={handleOpen} />}
         {tab === 'new-products'  && <NewProducts onOpen={handleOpen} activeBranch={activeBranch} />}
         {tab === 'settings'  && <Settings activeBranch={activeBranch} />}
       </main>

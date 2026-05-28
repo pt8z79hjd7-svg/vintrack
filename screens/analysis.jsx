@@ -1,5 +1,5 @@
 // === ניתוח וחריגות — מלאי שלילי, תקוע, מתחת לסף, מומלץ לדחוף ===
-const Analysis = ({ activeBranch = 'both' }) => {
+const Analysis = ({ activeBranch = 'both', onOpen }) => {
   useLiveData();
   const P = window.PRODUCTS || [];
   const stk = (p) => activeBranch === 'mikado' ? p.stock.mikado
@@ -57,7 +57,7 @@ const Analysis = ({ activeBranch = 'both' }) => {
             <thead><tr><th>מוצר</th><th>ספק</th><th style={tc}>מיקדו</th><th style={tc}>כוכב</th></tr></thead>
             <tbody>
               {negative.slice(0, 80).map((p) => (
-                <tr key={p.id}>
+                <tr key={p.id} onClick={() => onOpen?.('detail', p)} style={{ cursor: 'pointer' }}>
                   <td style={{ fontWeight: 600 }}>{p.name}</td>
                   <td>{p.supplier}</td>
                   <td style={{ ...tc, color: p.stock.mikado < 0 ? 'var(--danger)' : 'inherit', fontWeight: 700 }}>{p.stock.mikado}</td>
@@ -79,7 +79,7 @@ const Analysis = ({ activeBranch = 'both' }) => {
                 {belowMin.map((p) => {
                   const s = stk(p); const ms = p.min_stock || 3;
                   return (
-                    <tr key={p.id}>
+                    <tr key={p.id} onClick={() => onOpen?.('detail', p)} style={{ cursor: 'pointer' }}>
                       <td style={{ fontWeight: 600 }}>{p.name}</td>
                       <td>{p.supplier}</td>
                       <td style={{ ...te, color: 'var(--warn)', fontWeight: 700 }}>{s}</td>
@@ -100,7 +100,7 @@ const Analysis = ({ activeBranch = 'both' }) => {
             <thead><tr><th>מוצר</th><th>ספק</th><th style={te}>מלאי</th><th style={te}>קצב/שבוע</th><th style={te}>מחיר</th></tr></thead>
             <tbody>
               {dead.map((p) => (
-                <tr key={p.id}>
+                <tr key={p.id} onClick={() => onOpen?.('detail', p)} style={{ cursor: 'pointer' }}>
                   <td style={{ fontWeight: 600 }}>{p.name}</td>
                   <td>{p.supplier}</td>
                   <td style={te}>{stk(p)}</td>
@@ -120,7 +120,7 @@ const Analysis = ({ activeBranch = 'both' }) => {
             <thead><tr><th>מוצר</th><th>ספק</th><th style={te}>מרווח</th><th style={te}>מלאי</th><th style={te}>מחיר</th></tr></thead>
             <tbody>
               {push.map((p) => (
-                <tr key={p.id}>
+                <tr key={p.id} onClick={() => onOpen?.('detail', p)} style={{ cursor: 'pointer' }}>
                   <td style={{ fontWeight: 600 }}>{p.name}{p.is_promo && <span className="badge accent" style={{ marginInlineStart: 6, fontSize: 10 }}>מבצע</span>}</td>
                   <td>{p.supplier}</td>
                   <td style={te}><span className="badge ok">{(p.margin || 0).toFixed(0)}%</span></td>
@@ -143,7 +143,7 @@ const Analysis = ({ activeBranch = 'both' }) => {
                 {promoGap.map((p) => {
                   const diff = (p.price || 0) - (p.effective_sell_price || 0);
                   return (
-                    <tr key={p.id}>
+                    <tr key={p.id} onClick={() => onOpen?.('detail', p)} style={{ cursor: 'pointer' }}>
                       <td style={{ fontWeight: 600 }}>{p.name}<span className="badge accent" style={{ marginInlineStart: 6, fontSize: 10 }}>במבצע</span></td>
                       <td>{p.supplier}</td>
                       <td style={te}>₪{(p.price || 0).toFixed(0)}</td>
