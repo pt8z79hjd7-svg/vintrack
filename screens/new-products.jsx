@@ -208,13 +208,16 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
                 const isBusy = busy === p.sku;
                 const canApprove = (isEd ? (parseFloat(editCost) > 0 && parseFloat(editPrice) > 0) : (p.cost > 0 && p.price > 0));
                 return (
-                  <tr key={p.id} style={{ background: isEd ? 'var(--accent-soft)' : undefined }}>
+                  <tr key={p.id}
+                      style={{ background: isEd ? 'var(--accent-soft)' : undefined, cursor: 'pointer' }}
+                      onClick={() => !isEd && onOpen && onOpen(p)}>
                     <td>
                       <div className="row" style={{ gap: 4 }}>
                         {p.isNew && <span className="badge accent" style={{ fontSize: 10 }}>חדש</span>}
                         {p.missingCost && <span className="badge warn" style={{ fontSize: 10 }}>ללא עלות</span>}
                         {p.missingPrice && <span className="badge warn" style={{ fontSize: 10 }}>ללא מחיר</span>}
                         {!p.missingCost && !p.missingPrice && <span className="badge ok" style={{ fontSize: 10 }}>מוכן</span>}
+                        {p.parallel && <span className="badge" style={{ fontSize: 10, background: 'var(--accent-soft)' }}>מקביל</span>}
                       </div>
                     </td>
                     <td style={{ fontWeight: 600, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
@@ -257,10 +260,10 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
                           </>
                         ) : (
                           <button className="btn btn-sm btn-ghost" onClick={(e) => startEdit(p, e)}
-                                  title="ערוך מחירים">✏️</button>
+                                  title="ערוך מחירים מהיר">✏️</button>
                         )}
                         <button className={`btn btn-sm ${canApprove ? 'btn-primary' : ''}`}
-                                onClick={(e) => approveProduct(p, e)}
+                                onClick={(e) => { e.stopPropagation(); approveProduct(p, e); }}
                                 disabled={isBusy}
                                 title={canApprove ? 'אשר מוצר' : 'מלא עלות + מחיר קודם'}
                                 style={{ opacity: canApprove ? 1 : 0.5 }}>

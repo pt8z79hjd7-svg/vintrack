@@ -171,9 +171,13 @@ async function loadAllData() {
       price_anomalies: _jp(r.price_anomalies),
       new_products: _jp(r.new_products),
       promo_stats: typeof r.promo_stats === 'string' ? JSON.parse(r.promo_stats || '{}') : (r.promo_stats || {}),
+      incoming_purchases: _jp(r.incoming_purchases),
+      incoming_transfers: _jp(r.incoming_transfers),
       total_revenue: n(r.total_revenue),
       receipts: n(r.receipts),
       avg_basket: n(r.avg_basket),
+      purchase_count: n(r.purchase_count),
+      transfer_count: n(r.transfer_count),
     };
   });
 

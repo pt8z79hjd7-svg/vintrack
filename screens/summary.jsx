@@ -158,7 +158,9 @@ const DailyExpanded = ({ date, hasData }) => {
     </Card>
   );
 
-  const { top_sellers = [], generic_05 = [], club_discounts = [], price_anomalies = [], new_products = [], promo_stats = {} } = det;
+  const { top_sellers = [], generic_05 = [], club_discounts = [], price_anomalies = [],
+    new_products = [], promo_stats = {}, incoming_purchases = [], incoming_transfers = [],
+    purchase_count = 0, transfer_count = 0 } = det;
   const promoEntries = Object.entries(promo_stats).filter(([, v]) => v > 0);
 
   return (
@@ -362,6 +364,75 @@ const DailyExpanded = ({ date, hasData }) => {
         </Card>
       )}
 
+      {/* 📦 כניסות סחורה (ת.מ. רכש) */}
+      {incoming_purchases.length > 0 && (
+        <Card title="📦 כניסות סחורה" sub={`${incoming_purchases.length} פריטים התקבלו מספקים`}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>מוצר</th>
+                  <th style={{ textAlign: 'end' }}>כמות</th>
+                  <th>ספק</th>
+                  <th style={{ textAlign: 'end' }}>עלות בדוח</th>
+                  <th style={{ textAlign: 'end' }}>עלות בקובץ</th>
+                  <th>סניף</th>
+                </tr>
+              </thead>
+              <tbody>
+                {incoming_purchases.map((ip, i) => {
+                  const diff = ip.cost_doc && ip.cost_file ? (ip.cost_doc - ip.cost_file) : 0;
+                  const hasDiff = Math.abs(diff) > 1;
+                  return (
+                    <tr key={i}>
+                      <td style={{ fontWeight: 500 }}>{ip.name}</td>
+                      <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>{ip.qty}</td>
+                      <td style={{ fontSize: 12 }}>{ip.supplier}</td>
+                      <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                        {ip.cost_doc ? `₪${ip.cost_doc.toFixed(0)}` : '—'}
+                      </td>
+                      <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', color: hasDiff ? 'var(--warn)' : 'var(--ink-3)' }}>
+                        {ip.cost_file ? `₪${ip.cost_file.toFixed(0)}` : '—'}
+                        {hasDiff && <span style={{ fontSize: 10, marginRight: 4 }}>{diff > 0 ? `+${diff.toFixed(0)}` : diff.toFixed(0)}</span>}
+                      </td>
+                      <td>{ip.branch}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* 🔄 העברות בין סניפים */}
+      {incoming_transfers.length > 0 && (
+        <Card title="🔄 העברות בין סניפים" sub={`${incoming_transfers.length} פריטים הועברו`}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>מוצר</th>
+                  <th style={{ textAlign: 'end' }}>כמות</th>
+                  <th>מסניף</th>
+                  <th>לסניף</th>
+                </tr>
+              </thead>
+              <tbody>
+                {incoming_transfers.map((it, i) => (
+                  <tr key={i}>
+                    <td style={{ fontWeight: 500 }}>{it.name}</td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>{it.qty}</td>
+                    <td style={{ fontSize: 12 }}>{it.source}</td>
+                    <td>{it.branch}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       {/* 🆕 מוצרים חדשים */}
       {new_products.length > 0 && (
         <Card title="🆕 מוצרים חדשים" sub={`${new_products.length} מוצרים שנוספו לקובץ היום`}>
@@ -390,7 +461,8 @@ const DailyExpanded = ({ date, hasData }) => {
 
       {/* אם הכל ריק */}
       {top_sellers.length === 0 && generic_05.length === 0 && club_discounts.length === 0
-        && price_anomalies.length === 0 && new_products.length === 0 && promoEntries.length === 0 && (
+        && price_anomalies.length === 0 && new_products.length === 0 && promoEntries.length === 0
+        && incoming_purchases.length === 0 && incoming_transfers.length === 0 && (
         <Card>
           <div style={{ padding: 24, textAlign: 'center', color: 'var(--ok)', fontSize: 14, fontWeight: 600 }}>
             ✅ אין חריגות או אירועים מיוחדים היום
