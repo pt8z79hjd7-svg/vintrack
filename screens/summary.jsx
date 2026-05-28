@@ -174,38 +174,88 @@ const DailyExpanded = ({ date, hasData }) => {
                   <th>מוצר</th>
                   <th style={{ textAlign: 'end' }}>כמות</th>
                   <th style={{ textAlign: 'end' }}>הכנסה (כולל מע"מ)</th>
+                  <th style={{ textAlign: 'end' }}>מבצע</th>
                 </tr>
               </thead>
               <tbody>
-                {top_sellers.map((s, i) => (
-                  <tr key={i}>
-                    <td style={{ fontWeight: 700, color: i < 3 ? 'var(--accent)' : 'var(--ink-3)' }}>{i + 1}</td>
-                    <td>{s.name}</td>
-                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>{s.qty}</td>
-                    <td style={{ textAlign: 'end', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>₪{s.revenue?.toLocaleString('he-IL')}</td>
-                  </tr>
-                ))}
+                {top_sellers.map((s, i) => {
+                  const promo = s.barcode ? (window.PROMO_BY_BARCODE || {})[String(s.barcode)] : null;
+                  const prod = s.barcode ? (window.PRODUCTS || []).find(p => p.sku === String(s.barcode)) : null;
+                  const cost = prod?.cost || 0;
+                  const promoNet = promo ? promo.unit_price_net : null;
+                  const realProfit = promoNet && cost ? (promoNet - cost) : null;
+                  const realMargin = promoNet && promoNet > 0 ? ((promoNet - cost) / promoNet * 100) : null;
+                  return (
+                    <tr key={i}>
+                      <td style={{ fontWeight: 700, color: i < 3 ? 'var(--accent)' : 'var(--ink-3)' }}>{i + 1}</td>
+                      <td>
+                        {s.name}
+                        {promo && <span className="badge accent" style={{ marginInlineStart: 6, fontSize: 10 }}>🏷️ {promo.name}</span>}
+                      </td>
+                      <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>{s.qty}</td>
+                      <td style={{ textAlign: 'end', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>₪{s.revenue?.toLocaleString('he-IL')}</td>
+                      <td style={{ textAlign: 'end', fontSize: 12 }}>
+                        {promo ? (
+                          <span title={`מחיר ליח׳: ₪${promo.unit_price?.toFixed(0)} | רווח: ₪${realProfit?.toFixed(0)} | מרווח: ${realMargin?.toFixed(0)}%`}>
+                            <span style={{ fontWeight: 600 }}>₪{promo.unit_price?.toFixed(0)}</span>
+                            {realMargin != null && <span className={`badge ${realMargin >= 25 ? 'ok' : 'warn'}`} style={{ marginInlineStart: 4 }}>{realMargin.toFixed(0)}%</span>}
+                          </span>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </Card>
       )}
 
-      {/* 🏷️ מבצעים שזוהו */}
-      {promoEntries.length > 0 && (
-        <Card title="🏷️ מבצעים שזוהו" sub="זוהו אוטומטית מחשבוניות">
-          <div style={{ padding: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {promoEntries.map(([name, count]) => (
-              <div key={name} style={{
-                padding: '8px 14px', borderRadius: 'var(--r-md)', background: 'var(--accent-soft)',
-                color: 'var(--accent)', fontWeight: 600, fontSize: 13
-              }}>
-                {name}: {count} פריטים
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      {/* 🏷️ מבצעים שזוהו + מבצעי לקוחות */}
+      {(promoEntries.length > 0 || (window.PROMO_CATEGORIES || []).length > 0) && (() => {
+        const promoProds = (window.PRODUCTS || []).filter(p => p.promo);
+        const promoSummary = {};
+        promoProds.forEach(p => {
+          const k = p.promo.name;
+          promoSummary[k] = (promoSummary[k] || 0) + 1;
+        });
+        const promoSumEntries = Object.entries(promoSummary).filter(([, v]) => v > 0);
+        return (
+          <Card title="🏷️ מבצעים" sub="זוהו אוטומטית מחשבוניות + מבצעי לקוחות ידניים">
+            {promoEntries.length > 0 && (
+              <div style={{ padding: '12px 16px 4px', fontSize: 12, color: 'var(--ink-3)', fontWeight: 600 }}>זוהו בחשבוניות:</div>
+            )}
+            <div style={{ padding: '4px 16px 12px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {promoEntries.map(([name, count]) => (
+                <div key={name} style={{
+                  padding: '8px 14px', borderRadius: 'var(--r-md)', background: 'var(--accent-soft)',
+                  color: 'var(--accent)', fontWeight: 600, fontSize: 13
+                }}>
+                  {name}: {count} פריטים
+                </div>
+              ))}
+              {promoEntries.length === 0 && <span className="muted" style={{ fontSize: 13 }}>לא זוהו מבצעים אוטומטיים ביום זה</span>}
+            </div>
+            {promoSumEntries.length > 0 && (
+              <>
+                <div style={{ padding: '4px 16px', fontSize: 12, color: 'var(--ink-3)', fontWeight: 600, borderTop: '1px solid var(--line)' }}>
+                  מבצעי לקוחות פעילים ({promoProds.length} מוצרים):
+                </div>
+                <div style={{ padding: '4px 16px 12px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {promoSumEntries.map(([name, count]) => (
+                    <div key={name} style={{
+                      padding: '8px 14px', borderRadius: 'var(--r-md)', background: 'var(--ok-soft, oklch(0.95 0.04 145))',
+                      color: 'var(--ok)', fontWeight: 600, fontSize: 13
+                    }}>
+                      {name}: {count} מוצרים
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </Card>
+        );
+      })()}
 
       {/* ☕ פריטי 05 (כלליים) */}
       {generic_05.length > 0 && (
