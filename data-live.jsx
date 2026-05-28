@@ -22,11 +22,12 @@ Object.assign(window, {
   ORDERS: [], TRANSFERS: [], PROMOTIONS: [],
   ACTIVITY: [], INVENTORY_VALUE_BY_MONTH: [], PAST_ORDERS: {}, LAST_RECEIVED: {},
   APPROVED_PRODUCTS: new Set(),
+  PROMO_CATEGORIES: [], PROMO_BY_BARCODE: {},
 });
 
 async function loadAllData() {
   const sb = window.sb;
-  const [prodR, monR, dayR, invR, dealR, transR, ordR, detR, appR] = await Promise.all([
+  const [prodR, monR, dayR, invR, dealR, transR, ordR, detR, appR, pcatR, ppromoR] = await Promise.all([
     sb.from('products').select('*').limit(5000),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
@@ -36,8 +37,26 @@ async function loadAllData() {
     sb.from('order_recommendations').select('*'),
     sb.from('daily_details').select('*').order('summary_date', { ascending: false }).limit(60),
     sb.from('product_approvals').select('barcode'),
+    sb.from('promo_categories').select('*').order('price_total'),
+    sb.from('product_promos').select('*'),
   ]);
   const products = prodR.data || [];
+
+  // ─── מבצעי לקוחות (סוגי מבצעים + שיוך לכל מוצר) ───
+  const PROMO_CATEGORIES = (pcatR.data || []).map((c) => {
+    const u = n(c.units), pt = n(c.price_total), up = u > 0 ? pt / u : 0;
+    return { id: c.id, name: c.name, units: u, price_total: pt,
+             unit_price: up, unit_price_net: up / 1.18, active: c.active !== false };
+  });
+  const PROMO_BY_BARCODE = {};
+  (ppromoR.data || []).forEach((r) => {
+    const u = n(r.units), pt = n(r.price_total), up = u > 0 ? pt / u : 0;
+    PROMO_BY_BARCODE[String(r.barcode)] = {
+      id: r.promo_id, name: r.promo_name, units: u, price_total: pt,
+      unit_price: up,            // מחיר ליחידה כולל מע"מ
+      unit_price_net: up / 1.18, // נטו (להשוואה ל-effective_sell_price ולעלות)
+    };
+  });
 
   const BRANCHES = [
     { id: 'mikado', name: 'מיקדו', color: 'oklch(0.52 0.10 220)' },
@@ -66,6 +85,7 @@ async function loadAllData() {
     is_promo: !!p.is_promo,
     min_stock: n(p.min_stock),
     effective_sell_price: p.effective_sell_price != null ? n(p.effective_sell_price) : null,
+    promo: PROMO_BY_BARCODE[String(p.barcode)] || null,   // מבצע לקוחות משויך
     created_at: p.created_at || '',
     updated_at: p.updated_at || '',
   }));
@@ -164,6 +184,7 @@ async function loadAllData() {
     BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH,
     DAILY_DETAILS, APPROVED_PRODUCTS,
+    PROMO_CATEGORIES, PROMO_BY_BARCODE,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
     LAST_REFRESH: Date.now(),
   });

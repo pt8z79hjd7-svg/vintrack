@@ -2,9 +2,9 @@
 const Sales = ({ activeBranch = 'both', onOpen }) => {
   useLiveData();   // re-render אחרי refreshData
   const P = (window.PRODUCTS || []).filter((p) => p.total > 0 || (p.weekly || 0) > 0);
-  // מחיר אפקטיבי = ממוצע משוקלל 30 ימים (כולל מבצעים). fallback למחיר רשמי
-  const effPrice = (p) => p.effective_sell_price || p.price || 0;
-  const hasEff = (p) => p.effective_sell_price != null && Math.abs(p.effective_sell_price - (p.price || 0)) > 0.5;
+  // מחיר אפקטיבי = מבצע לקוחות ידני (אם משויך) → ממוצע משוקלל 30 ימים → מחיר רשמי
+  const effPrice = (p) => (p.promo && p.promo.unit_price_net) || p.effective_sell_price || p.price || 0;
+  const hasEff = (p) => { const ep = effPrice(p); return ep > 0 && Math.abs(ep - (p.price || 0)) > 0.5; };
   const ppu = (p) => effPrice(p) - (p.cost || 0);            // רווח ליחידה — לפי מחיר אפקטיבי
   const effMargin = (p) => { const ep = effPrice(p); return ep > 0 ? ((ep - (p.cost || 0)) / ep) * 100 : 0; };
   const wprofit = (p) => (p.weekly || 0) * ppu(p);           // רווח שבועי משוער ₪
@@ -43,7 +43,8 @@ const Sales = ({ activeBranch = 'both', onOpen }) => {
                 <td style={{ color: 'var(--ink-3)', fontWeight: 700 }}>{i + 1}</td>
                 <td style={{ fontWeight: 600 }}>
                   {p.name}
-                  {p.is_promo && <span className="badge accent" style={{ marginInlineStart: 6, fontSize: 10 }}>מבצע</span>}
+                  {p.promo && <span className="badge accent" style={{ marginInlineStart: 6, fontSize: 10 }}>🏷️ {p.promo.name}</span>}
+                  {!p.promo && p.is_promo && <span className="badge accent" style={{ marginInlineStart: 6, fontSize: 10 }}>מבצע</span>}
                 </td>
                 <td>{p.supplier}</td>
                 <td style={te}>₪{(p.cost || 0).toFixed(0)}</td>

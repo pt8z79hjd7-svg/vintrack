@@ -26,6 +26,57 @@ const ProductDetailModal = ({ product, onClose }) => {
   const [parallel, setParallel] = useState(product.parallel);
   const supName = SUPPLIERS.find(s => s.id === supplier)?.name || supplier;
 
+  // ─── מבצע לקוחות ───
+  const [cats, setCats] = useState(window.PROMO_CATEGORIES || []);
+  const [promoId, setPromoId] = useState(product.promo?.id || '');
+  const [promoBusy, setPromoBusy] = useState(false);
+  const [showNewPromo, setShowNewPromo] = useState(false);
+  const [npName, setNpName] = useState('');
+  const [npUnits, setNpUnits] = useState('');
+  const [npTotal, setNpTotal] = useState('');
+  const selPromo = cats.find(c => c.id === promoId) || null;
+
+  const removePromo = async () => {
+    setPromoBusy(true);
+    const { error } = await window.sb.from('product_promos').delete().eq('barcode', product.sku);
+    setPromoBusy(false); setPromoId('');
+    if (error) { (window.toast?.error || alert)('הסרה נכשלה: ' + error.message); return; }
+    (window.toast?.success || alert)('המבצע הוסר');
+    setTimeout(() => window.refreshData && window.refreshData('promo-remove'), 400);
+  };
+
+  const savePromo = async () => {
+    if (!promoId) return removePromo();
+    const cat = cats.find(c => c.id === promoId);
+    if (!cat) return;
+    setPromoBusy(true);
+    const { error } = await window.sb.from('product_promos').upsert({
+      barcode: product.sku, promo_id: cat.id, promo_name: cat.name,
+      units: cat.units, price_total: cat.price_total, updated_at: new Date().toISOString(),
+    }, { onConflict: 'barcode' });
+    setPromoBusy(false);
+    if (error) { (window.toast?.error || alert)('שמירת מבצע נכשלה: ' + error.message); return; }
+    (window.toast?.success || alert)('✓ המבצע שויך למוצר');
+    setTimeout(() => window.refreshData && window.refreshData('promo-save'), 400);
+  };
+
+  const addNewPromo = async () => {
+    const units = Number(npUnits) || 0, total = Number(npTotal) || 0;
+    const name = (npName.trim()) || (units && total ? `${units} ב-${total}` : '');
+    if (!units || !total || !name) { (window.toast?.warn || alert)('מלא שם, כמות יחידות ומחיר כולל'); return; }
+    setPromoBusy(true);
+    const { data, error } = await window.sb.from('promo_categories')
+      .insert({ name, units, price_total: total }).select().single();
+    setPromoBusy(false);
+    if (error) { (window.toast?.error || alert)('יצירת מבצע נכשלה: ' + error.message); return; }
+    (window.toast?.success || alert)('✓ סוג מבצע נוצר');
+    const nc = { id: data.id, name: data.name, units: data.units, price_total: data.price_total,
+                 unit_price: data.units > 0 ? data.price_total / data.units : 0, active: true };
+    setCats([...cats, nc]); setPromoId(nc.id);
+    setShowNewPromo(false); setNpName(''); setNpUnits(''); setNpTotal('');
+    window.refreshData && window.refreshData('promo-cat-add');
+  };
+
   const saveProduct = async () => {
     setSaving(true);
     const { error } = await window.sb.from('products')
@@ -159,6 +210,88 @@ const ProductDetailModal = ({ product, onClose }) => {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* מבצע לקוחות — שיוך + חישוב רווח אמיתי במחיר מבצע */}
+        <div className="card" style={{ background: 'var(--surface)' }}>
+          <div style={{ padding: 16 }}>
+            <div className="between" style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 13 }}>🏷️ מבצע לקוחות</div>
+              {selPromo && (
+                <button className="btn btn-sm btn-ghost" onClick={removePromo} disabled={promoBusy}
+                        style={{ color: 'var(--danger)' }}>הסר ממבצע</button>
+              )}
+            </div>
+            <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <select className="select" value={promoId} onChange={(e) => setPromoId(e.target.value)}
+                      style={{ fontSize: 13, minWidth: 150 }}>
+                <option value="">ללא מבצע</option>
+                {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button className="btn btn-sm btn-primary" onClick={savePromo} disabled={promoBusy}>
+                {promoBusy ? 'שומר…' : 'שמור מבצע'}
+              </button>
+              <button className="btn btn-sm btn-ghost" onClick={() => setShowNewPromo(v => !v)}>
+                <IPlus size={13} /> מבצע חדש
+              </button>
+            </div>
+
+            {showNewPromo && (
+              <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div>
+                  <div className="muted" style={{ fontSize: 11 }}>שם</div>
+                  <input className="input" value={npName} placeholder="3 ב-120"
+                         onChange={(e) => setNpName(e.target.value)} style={{ width: 100, padding: '4px 8px' }} />
+                </div>
+                <div>
+                  <div className="muted" style={{ fontSize: 11 }}>כמות יח׳</div>
+                  <input className="input" type="number" value={npUnits} placeholder="3"
+                         onChange={(e) => setNpUnits(e.target.value)} style={{ width: 64, padding: '4px 8px' }} />
+                </div>
+                <div>
+                  <div className="muted" style={{ fontSize: 11 }}>מחיר כולל ₪</div>
+                  <input className="input" type="number" value={npTotal} placeholder="120"
+                         onChange={(e) => setNpTotal(e.target.value)} style={{ width: 84, padding: '4px 8px' }} />
+                </div>
+                <button className="btn btn-sm btn-primary" onClick={addNewPromo} disabled={promoBusy}>צור</button>
+              </div>
+            )}
+
+            {selPromo && (() => {
+              const unitIncl = selPromo.unit_price;       // כולל מע"מ
+              const net = unitIncl / 1.18;
+              const profit = net - (cost || 0);
+              const margin = net > 0 ? (profit / net) * 100 : 0;
+              return (
+                <div className="grid-3" style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+                  <div>
+                    <div className="muted" style={{ fontSize: 11 }}>מחיר ליחידה במבצע</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent-strong)', fontVariantNumeric: 'tabular-nums' }}>
+                      ₪{unitIncl.toFixed(2)}
+                    </div>
+                    <div className="muted" style={{ fontSize: 10 }}>{selPromo.units} יח׳ ב-₪{selPromo.price_total}</div>
+                  </div>
+                  <div>
+                    <div className="muted" style={{ fontSize: 11 }}>רווח ליחידה (נטו)</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: profit >= 0 ? 'var(--ok)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
+                      ₪{profit.toFixed(2)}
+                    </div>
+                    <div className="muted" style={{ fontSize: 10 }}>מחיר רגיל: ₪{Number(price || 0).toFixed(0)}</div>
+                  </div>
+                  <div>
+                    <div className="muted" style={{ fontSize: 11 }}>מרווח במבצע</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                                  color: margin >= 25 ? 'var(--ok)' : margin >= 0 ? 'var(--warn)' : 'var(--danger)' }}>
+                      {margin.toFixed(0)}%
+                    </div>
+                    <div className="muted" style={{ fontSize: 10 }}>
+                      {margin < 0 ? '⚠️ הפסד!' : margin < 15 ? 'נמוך' : 'תקין'}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
 

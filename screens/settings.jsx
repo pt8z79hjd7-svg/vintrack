@@ -41,6 +41,42 @@ const Settings = ({ activeBranch = 'both' }) => {
     }).length;
   }, [activeBranch]);
 
+  // ─── מבצעי לקוחות ───
+  const promoCats = window.PROMO_CATEGORIES || [];
+  const promoUsage = React.useMemo(() => {
+    const m = {}; const map = window.PROMO_BY_BARCODE || {};
+    Object.values(map).forEach(pr => { if (pr.id) m[pr.id] = (m[pr.id] || 0) + 1; });
+    return m;
+  }, [promoCats.length, window.LAST_REFRESH]);
+  const [pName, setPName] = useState('');
+  const [pUnits, setPUnits] = useState('');
+  const [pTotal, setPTotal] = useState('');
+  const [pBusy, setPBusy] = useState(false);
+
+  const addPromoCat = async () => {
+    const units = Number(pUnits) || 0, total = Number(pTotal) || 0;
+    const name = pName.trim() || (units && total ? `${units} ב-${total}` : '');
+    if (!units || !total || !name) { (window.toast?.warn || alert)('מלא שם, כמות יחידות ומחיר כולל'); return; }
+    setPBusy(true);
+    const { error } = await window.sb.from('promo_categories').insert({ name, units, price_total: total });
+    setPBusy(false);
+    if (error) { (window.toast?.error || alert)('יצירה נכשלה: ' + error.message); return; }
+    (window.toast?.success || alert)('✓ מבצע נוצר');
+    setPName(''); setPUnits(''); setPTotal('');
+    setTimeout(() => window.refreshData && window.refreshData('promo-cat-add'), 400);
+  };
+
+  const deletePromoCat = async (id, name, used) => {
+    if (used > 0) { (window.toast?.warn || alert)(`לא ניתן למחוק — ${used} מוצרים משויכים ל"${name}". הסר אותם קודם.`); return; }
+    if (!window.confirm(`למחוק את סוג המבצע "${name}"?`)) return;
+    setPBusy(true);
+    const { error } = await window.sb.from('promo_categories').delete().eq('id', id);
+    setPBusy(false);
+    if (error) { (window.toast?.error || alert)('מחיקה נכשלה: ' + error.message); return; }
+    (window.toast?.success || alert)('המבצע נמחק');
+    setTimeout(() => window.refreshData && window.refreshData('promo-cat-del'), 400);
+  };
+
   return (
     <div className="page">
       <div className="between">
@@ -91,6 +127,65 @@ const Settings = ({ activeBranch = 'both' }) => {
             ⚠ פעולה זו תדרוס את ה-min_stock של <b>כל המוצרים</b> ({stats.total.toLocaleString('he-IL')}).
             <br />
             כדי לקבוע מינימום למוצר ספציפי: כרטיסיית המוצר → ערוך → שדה "מינימום מלאי להתראה".
+          </div>
+        </div>
+      </Card>
+
+      {/* ניהול מבצעי לקוחות */}
+      <Card title="🏷️ מבצעי לקוחות" sub="סוגי מבצעי מכירה (3 ב-100, 3 ב-120…) — לשיוך למוצרים בכרטיס המוצר">
+        <div style={{ padding: 18 }}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead><tr>
+                <th>מבצע</th>
+                <th style={{ textAlign: 'end' }}>יחידות</th>
+                <th style={{ textAlign: 'end' }}>מחיר כולל</th>
+                <th style={{ textAlign: 'end' }}>ליחידה</th>
+                <th style={{ textAlign: 'end' }}>משויכים</th>
+                <th></th>
+              </tr></thead>
+              <tbody>
+                {promoCats.map(c => {
+                  const used = promoUsage[c.id] || 0;
+                  return (
+                    <tr key={c.id}>
+                      <td style={{ fontWeight: 600 }}>{c.name}</td>
+                      <td style={{ textAlign: 'end' }}>{c.units}</td>
+                      <td style={{ textAlign: 'end' }}>₪{c.price_total}</td>
+                      <td style={{ textAlign: 'end', fontWeight: 700, color: 'var(--accent-strong)' }}>₪{c.unit_price.toFixed(2)}</td>
+                      <td style={{ textAlign: 'end' }}>{used || '—'}</td>
+                      <td style={{ textAlign: 'end' }}>
+                        <button className="btn btn-sm btn-ghost" style={{ color: 'var(--danger)' }}
+                                onClick={() => deletePromoCat(c.id, c.name, used)} disabled={pBusy}>מחק</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!promoCats.length && <tr><td colSpan="6" style={{ textAlign: 'center', padding: 20, color: 'var(--ink-3)' }}>אין מבצעים — הוסף למטה</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <div className="row" style={{ gap: 8, marginTop: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div>
+              <div className="muted" style={{ fontSize: 11 }}>שם</div>
+              <input className="input" value={pName} placeholder="3 ב-120"
+                     onChange={e => setPName(e.target.value)} style={{ width: 110, padding: '6px 8px' }} />
+            </div>
+            <div>
+              <div className="muted" style={{ fontSize: 11 }}>כמות יח׳</div>
+              <input className="input" type="number" value={pUnits} placeholder="3"
+                     onChange={e => setPUnits(e.target.value)} style={{ width: 70, padding: '6px 8px' }} />
+            </div>
+            <div>
+              <div className="muted" style={{ fontSize: 11 }}>מחיר כולל ₪</div>
+              <input className="input" type="number" value={pTotal} placeholder="120"
+                     onChange={e => setPTotal(e.target.value)} style={{ width: 90, padding: '6px 8px' }} />
+            </div>
+            <button className="btn btn-primary" onClick={addPromoCat} disabled={pBusy}>{pBusy ? '…' : '+ הוסף מבצע'}</button>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
+            כדי לשייך יין למבצע: כרטיסיית המוצר → קטע "🏷️ מבצע לקוחות" → בחר מבצע → שמור.
+            <br />המחיר ליחידה והרווח האמיתי מחושבים אוטומטית ומופיעים במכירות ובניתוח.
           </div>
         </div>
       </Card>
