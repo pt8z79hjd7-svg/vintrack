@@ -32,7 +32,7 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
       if (stock === 'low' && bs >= 10) return false;
       if (stock === 'negative' && !branchNeg(p)) return false;
       // בסניף יחיד — לא להציג מוצרים שאין להם מלאי שם (לא פעיל / 0)
-      if (activeBranch !== 'both' && bs === 0 && stock === 'all') return false;
+      if (activeBranch !== 'both' && bs === 0 && stock === 'all' && !q) return false;
       if (q) {
         const Q = q.toLowerCase();
         const matchMain = p.name.toLowerCase().includes(Q) || p.sku.includes(q);

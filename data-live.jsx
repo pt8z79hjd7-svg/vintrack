@@ -28,7 +28,7 @@ Object.assign(window, {
 async function loadAllData() {
   const sb = window.sb;
   const [prodR, monR, dayR, invR, dealR, transR, ordR, detR, appR, pcatR, ppromoR] = await Promise.all([
-    sb.from('products').select('*').limit(5000),
+    sb.from('products').select('*').limit(10000),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
     sb.from('supplier_inventory').select('*'),
