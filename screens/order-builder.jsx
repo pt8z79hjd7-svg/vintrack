@@ -1,11 +1,14 @@
 // === Supplier Order Builder — pick a supplier, build & export an order ===
 
 const SupplierHub = ({ onSelectSupplier }) => {
+  useLiveData();
+  const [planOpen, setPlanOpen] = useState(false);
+  const dmin = (window.SETTINGS && window.SETTINGS.defaultMin) || 3;
+
   // Per-supplier aggregates
   const supplierData = SUPPLIERS.map(s => {
     const items = PRODUCTS.filter(p => p.supplier === s.id);
     const totalValue = items.reduce((acc, p) => acc + (p.stock.mikado + p.stock.kohav) * p.cost, 0);
-    const dmin = (window.SETTINGS && window.SETTINGS.defaultMin) || 3;
     const lowItems = items.filter(p => {
       const min = p.min_stock > 0 ? p.min_stock : dmin;
       return p.stock.mikado < min || p.stock.kohav < min;
@@ -14,6 +17,26 @@ const SupplierHub = ({ onSelectSupplier }) => {
     const past = PAST_ORDERS[s.id] || [];
     return { ...s, items, totalValue, lowItems, last, past };
   });
+
+  // תכנון הזמנות — כל המוצרים מתחת למינימום, מקובצים לפי ספק (בסיס למחזור הזמנות)
+  const plan = React.useMemo(() => {
+    const rows = [];
+    let units = 0, value = 0;
+    PRODUCTS.forEach(p => {
+      const min = p.min_stock > 0 ? p.min_stock : dmin;
+      const needM = Math.max(0, min - p.stock.mikado);
+      const needK = Math.max(0, min - p.stock.kohav);
+      const need = needM + needK;
+      if (need > 0) { rows.push({ ...p, need, needM, needK, min }); units += need; value += need * p.cost; }
+    });
+    const bySup = {};
+    rows.forEach(r => { (bySup[r.supplier] = bySup[r.supplier] || []).push(r); });
+    const groups = Object.keys(bySup).map(sid => {
+      const list = bySup[sid].sort((a, b) => b.need - a.need);
+      return { sid, name: supLabel(sid), list, units: list.reduce((a, x) => a + x.need, 0), value: list.reduce((a, x) => a + x.need * x.cost, 0) };
+    }).sort((a, b) => b.value - a.value);
+    return { rows, units, value, groups, count: rows.length };
+  }, [window.LAST_REFRESH]);
 
   const openOrdersCount = ORDERS.filter(o => o.status !== 'completed').length;
 
@@ -28,6 +51,67 @@ const SupplierHub = ({ onSelectSupplier }) => {
           </div>
         </div>
       </div>
+
+      {/* תכנון הזמנות — מתחת למינימום, מקובץ לפי ספק */}
+      <Card>
+        <div className="between" style={{ padding: '4px 2px', cursor: 'pointer' }} onClick={() => setPlanOpen(!planOpen)}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>📋 תכנון הזמנות — מתחת למינימום</div>
+            <div className="muted" style={{ fontSize: 12.5, marginTop: 3 }}>
+              {plan.count > 0
+                ? `${plan.count} מוצרים · ${plan.units} יח׳ להזמנה · ₪${Math.round(plan.value).toLocaleString('he-IL')} (לפני מע״מ)`
+                : 'כל המוצרים מעל המינימום ✓'}
+            </div>
+          </div>
+          {plan.count > 0 && (
+            <button className="btn btn-sm">{planOpen ? 'הסתר ▲' : 'הצג תכנון ▼'}</button>
+          )}
+        </div>
+
+        {planOpen && plan.count > 0 && (
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {plan.groups.map(g => (
+              <div key={g.sid}>
+                <div className="between" style={{ marginBottom: 6 }}>
+                  <button className="btn btn-sm btn-ghost" onClick={() => onSelectSupplier(g.sid)}
+                          style={{ fontWeight: 700, fontSize: 13.5 }}>
+                    {g.name} <IChevronLeft size={13} />
+                  </button>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    {g.list.length} פריטים · {g.units} יח׳ · ₪{Math.round(g.value).toLocaleString('he-IL')}
+                  </span>
+                </div>
+                <table className="tbl" style={{ fontSize: 12.5 }}>
+                  <thead>
+                    <tr>
+                      <th>ברקוד</th>
+                      <th>מוצר</th>
+                      <th style={{ textAlign: 'center' }}>מיקדו</th>
+                      <th style={{ textAlign: 'center' }}>כוכב</th>
+                      <th style={{ textAlign: 'center' }}>מינ׳</th>
+                      <th style={{ textAlign: 'center' }}>להזמין</th>
+                      <th style={{ textAlign: 'end' }}>עלות שורה</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.list.map(p => (
+                      <tr key={p.id}>
+                        <td className="mono-tiny">{p.sku}</td>
+                        <td>{p.name}</td>
+                        <td style={{ textAlign: 'center', color: p.stock.mikado < p.min ? 'var(--danger)' : 'inherit' }}>{p.stock.mikado}</td>
+                        <td style={{ textAlign: 'center', color: p.stock.kohav < p.min ? 'var(--danger)' : 'inherit' }}>{p.stock.kohav}</td>
+                        <td style={{ textAlign: 'center' }}>{p.min}</td>
+                        <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--accent-strong)' }}>{p.need}</td>
+                        <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(p.need * p.cost).toLocaleString('he-IL')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {/* Supplier picker cards */}
       <div className="grid-3">
