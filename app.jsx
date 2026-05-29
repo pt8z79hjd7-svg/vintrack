@@ -203,7 +203,7 @@ function App() {
       </nav>
 
       {/* Modals */}
-      {modal?.kind === 'add'    && <AddProductModal onClose={closeModal} />}
+      {modal?.kind === 'add'    && <AddProductModal onClose={closeModal} initialBarcode={modal.barcode || ''} />}
       {modal?.kind === 'detail' && <ProductDetailModal product={modal.product} onClose={closeModal} />}
       {modal?.kind === 'order'  && <OrderModal product={modal.product} onClose={closeModal} />}
 
@@ -212,6 +212,7 @@ function App() {
         <ScannerModal
           onClose={() => setScannerOpen(false)}
           onFound={(product) => handleOpen('detail', product)}
+          onAdd={(barcode) => setModal({ kind: 'add', barcode })}
         />
       )}
 

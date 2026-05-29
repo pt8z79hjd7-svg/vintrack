@@ -450,9 +450,9 @@ const BranchStockRow = ({ branch, value, editable = false, onChange }) => {
 };
 
 // === Add product modal ===
-const AddProductModal = ({ onClose }) => {
+const AddProductModal = ({ onClose, initialBarcode }) => {
   const [form, setForm] = useState({
-    name: '', sku: '', cat: 'red', price: '', cost: '',
+    name: '', sku: initialBarcode || '', cat: 'red', price: '', cost: '',
     supplier: '', mikado: 0, kohav: 0
   });
   const set = (k, v) => setForm({ ...form, [k]: v });

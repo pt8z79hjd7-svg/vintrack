@@ -1,7 +1,7 @@
 // === Barcode scanner — real camera via html5-qrcode + manual input ===
 // Requires: <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
-const ScannerModal = ({ onClose, onFound }) => {
+const ScannerModal = ({ onClose, onFound, onAdd }) => {
   const [state, setState] = useState('init'); // init | scanning | found | notfound | manual | error
   const [scanned, setScanned] = useState(null);
   const [manualCode, setManualCode] = useState('');
@@ -252,6 +252,11 @@ const ScannerModal = ({ onClose, onFound }) => {
             <>
               <button className="btn" onClick={tryAgain}>סרוק שוב</button>
               <button className="btn" onClick={() => setState('manual')}>הקלד ברקוד אחר</button>
+              {onAdd && (
+                <button className="btn btn-primary" onClick={() => { onAdd(scanned?.code); handleClose(); }}>
+                  + הוסף מוצר חדש
+                </button>
+              )}
             </>
           )}
 
