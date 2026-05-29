@@ -29,6 +29,66 @@ const ACCENT_PRESETS = {
   '#374151': { '--accent': 'oklch(0.30 0.01 240)', '--accent-soft': 'oklch(0.93 0.005 240)', '--accent-strong': 'oklch(0.18 0.01 240)' },
 };
 
+// ─── פס KPI עליון קבוע — מחזור יומי/חודשי, רווח גולמי, ערך מלאי (בכל מסך) ───
+function TopStatsBar({ activeBranch, onNav }) {
+  const VAT = 1.18;
+  const fmt = window.fmtCurrency || ((v) => `₪${Math.round(v || 0).toLocaleString('he-IL')}`);
+  const pickBranch = (o) => activeBranch === 'mikado' ? (o.mikado || 0)
+                          : activeBranch === 'kohav'  ? (o.kohav || 0)
+                          : (o.total != null ? o.total : o.value) || 0;
+
+  // חודשי נוכחי
+  const cur = MONTHLY[MONTHLY.length - 1] || { total: 0, mikado: 0, kohav: 0, profit: 0, margin: 0, m: '' };
+  const monthVal = pickBranch(cur);
+  const monthProfit = activeBranch === 'both'
+    ? (cur.profit || 0)
+    : Math.round((cur.profit || 0) * (cur.total ? monthVal / cur.total : 0));
+
+  // יומי — היום אם קיים, אחרת היום האחרון הזמין
+  const byDate = window.DAILY_BY_DATE || {};
+  const dates = Object.keys(byDate).sort();
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const dkey = byDate[todayISO] ? todayISO : (dates[dates.length - 1] || '');
+  const draw = byDate[dkey] || { total: 0, mikado: 0, kohav: 0 };
+  const dayVal = pickBranch(draw);
+  const isToday = dkey === todayISO;
+
+  // ערך מלאי נוכחי (לפי עלות)
+  const inv = window.INVENTORY_VALUE_TOTAL || { value: 0, mikado: 0, kohav: 0 };
+  const invVal = activeBranch === 'mikado' ? (inv.mikado || 0)
+               : activeBranch === 'kohav'  ? (inv.kohav || 0)
+               : (inv.value || 0);
+
+  const marginOK = (cur.margin || 0) >= 25;
+
+  return (
+    <div className="topstats">
+      <button className="topstat" onClick={() => onNav('daily')} title="מחזור היום — לחץ לפירוט">
+        <div className="topstat-label">מחזור יומי{isToday ? ' · היום' : dkey ? ' · ' + dkey.slice(5) : ''}</div>
+        <div className="topstat-value">{fmt(Math.round(dayVal * VAT))}</div>
+        <div className="topstat-sub">כולל מע״מ</div>
+      </button>
+      <button className="topstat" onClick={() => onNav('monthly')} title="מחזור החודש — לחץ לפירוט">
+        <div className="topstat-label">מחזור חודשי{cur.m ? ' · ' + cur.m : ''}</div>
+        <div className="topstat-value">{fmt(Math.round(monthVal * VAT))}</div>
+        <div className="topstat-sub">כולל מע״מ</div>
+      </button>
+      <button className="topstat topstat-ok" onClick={() => onNav('monthly')} title="רווח גולמי — מחזור פחות עלות מכר">
+        <div className="topstat-label">רווח גולמי</div>
+        <div className="topstat-value">{fmt(monthProfit)}</div>
+        <div className="topstat-sub" style={{ color: marginOK ? 'var(--ok)' : 'var(--warn)' }}>
+          מרווח {Number(cur.margin || 0).toFixed(1)}% {marginOK ? '✓' : '· יעד 25%'}
+        </div>
+      </button>
+      <button className="topstat topstat-accent" onClick={() => onNav('inventory')} title="ערך המלאי בחנות לפי עלות">
+        <div className="topstat-label">ערך מלאי</div>
+        <div className="topstat-value">{fmt(invVal)}</div>
+        <div className="topstat-sub">לפי עלות</div>
+      </button>
+    </div>
+  );
+}
+
 function App() {
   const [tab, setTab] = useState('dashboard');
   const [modal, setModal] = useState(null);   // { kind, product }
@@ -162,6 +222,9 @@ function App() {
           <button className="icon-btn" title="הגדרות" onClick={() => handleNav('settings')}><ISettings size={18} /></button>
         </div>
       </header>
+
+      {/* ─── פס KPI עליון קבוע (בכל המסכים) ─── */}
+      <TopStatsBar activeBranch={activeBranch} onNav={handleNav} />
 
       {/* ─── Nav strip: primary + secondary tabs ─── */}
       <nav className="nav-strip">

@@ -1619,7 +1619,7 @@ button:focus-visible, .input:focus-visible, .select:focus-visible {
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
   position: sticky;
-  top: 56px;
+  top: 118px;   /* topbar 56 + topstats 62 */
   z-index: 29;
   overflow: hidden;
 }
@@ -1633,6 +1633,48 @@ button:focus-visible, .input:focus-visible, .select:focus-visible {
   -ms-overflow-style: none;
 }
 .nav-strip-row::-webkit-scrollbar { display: none; }
+
+/* ─── פס KPI עליון קבוע (מחזור יומי/חודשי, רווח גולמי, ערך מלאי) ─── */
+.topstats {
+  display: flex;
+  gap: 1px;
+  height: 62px;
+  background: var(--line);          /* קווי-הפרדה בין האריחים */
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 56px;
+  z-index: 28;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.topstats::-webkit-scrollbar { display: none; }
+.topstat {
+  flex: 1 1 0;
+  min-width: 124px;
+  background: var(--bg-elev);
+  border: none;
+  padding: 9px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+  transition: background 120ms;
+}
+.topstat:hover { background: var(--surface); }
+.topstat-label { font-size: 11px; font-weight: 500; color: var(--ink-3); white-space: nowrap; }
+.topstat-value {
+  font-size: 20px; font-weight: 800; letter-spacing: -0.02em;
+  color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.topstat-sub { font-size: 10.5px; color: var(--ink-4); white-space: nowrap; }
+.topstat-accent .topstat-value { color: var(--accent-strong); }
+[data-theme="dark"] .topstat-accent .topstat-value { color: oklch(0.85 0.06 220); }
+.topstat-ok .topstat-value { color: var(--ok); }
 
 .nav-tab {
   display: flex;
@@ -1700,7 +1742,13 @@ button:focus-visible, .input:focus-visible, .select:focus-visible {
   .topbar-brand .brand-mark { width: 28px; height: 28px; }
   .branch-switch-top { display: none; }   /* branch switcher moves to strip */
 
-  .nav-strip { top: 50px; }
+  .topstats { height: 54px; top: 50px; }
+  .topstat { min-width: 116px; padding: 7px 12px; }
+  .topstat-value { font-size: 17px; }
+  .topstat-label { font-size: 10px; }
+  .topstat-sub { font-size: 9.5px; }
+
+  .nav-strip { top: 104px; }   /* topbar 50 + topstats 54 */
   .nav-strip-row { padding: 0 6px; gap: 0; }
   .nav-tab { padding: 8px 10px; font-size: 12px; }
   .nav-tab .icon { width: 14px; height: 14px; }

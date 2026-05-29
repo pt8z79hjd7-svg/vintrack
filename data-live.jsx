@@ -20,7 +20,8 @@ Object.assign(window, {
   CATEGORIES: [{ id: 'all', label: 'הכל' }], SUPPLIERS: [], PRODUCTS: [],
   MONTHLY: [], DAILY_SAMPLE: {}, DAILY_BY_DATE: {}, DAILY_DETAILS: {},
   ORDERS: [], TRANSFERS: [], PROMOTIONS: [],
-  ACTIVITY: [], INVENTORY_VALUE_BY_MONTH: [], PAST_ORDERS: {}, LAST_RECEIVED: {},
+  ACTIVITY: [], INVENTORY_VALUE_BY_MONTH: [], INVENTORY_VALUE_TOTAL: { value: 0, mikado: 0, kohav: 0 },
+  PAST_ORDERS: {}, LAST_RECEIVED: {},
   APPROVED_PRODUCTS: new Set(),
   PROMO_CATEGORIES: [], PROMO_BY_BARCODE: {},
 });
@@ -142,13 +143,21 @@ async function loadAllData() {
   const DAILY_SAMPLE = dailyRows[0] ? mkDay(dailyRows[0])
     : { date: '', total: 0, mikado: 0, kohav: 0, profit: 0, margin: 0, salesLines: 0, lines: [] };
 
-  // שווי מלאי לפי ספק/חודש
+  // שווי מלאי לפי ספק/חודש (+ פיצול סניפים לחודש האחרון — לפס ה-KPI העליון)
   const invMap = {};
+  const invBranch = {};   // month -> {value, mikado, kohav}
   (invRows || []).forEach((r) => {
     if (!invMap[r.month]) invMap[r.month] = { m: mlabel(r.month), values: {} };
     invMap[r.month].values[r.supplier] = n(r.value);
+    if (!invBranch[r.month]) invBranch[r.month] = { value: 0, mikado: 0, kohav: 0 };
+    invBranch[r.month].value += n(r.value);
+    invBranch[r.month].mikado += n(r.value_mikado);
+    invBranch[r.month].kohav += n(r.value_kochav);
   });
-  const INVENTORY_VALUE_BY_MONTH = Object.keys(invMap).sort().map((k) => invMap[k]);
+  const _invMonths = Object.keys(invMap).sort();
+  const INVENTORY_VALUE_BY_MONTH = _invMonths.map((k) => invMap[k]);
+  const _lastInvMonth = _invMonths[_invMonths.length - 1];
+  const INVENTORY_VALUE_TOTAL = _lastInvMonth ? invBranch[_lastInvMonth] : { value: 0, mikado: 0, kohav: 0 };
 
   // מבצעים
   const PROMOTIONS = (dealRows || []).map((d) => ({
@@ -203,7 +212,7 @@ async function loadAllData() {
 
   Object.assign(window, {
     BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
-    ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH,
+    ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH, INVENTORY_VALUE_TOTAL,
     DAILY_DETAILS, APPROVED_PRODUCTS,
     PROMO_CATEGORIES, PROMO_BY_BARCODE,
     PAST_ORDERS: {}, LAST_RECEIVED: {},

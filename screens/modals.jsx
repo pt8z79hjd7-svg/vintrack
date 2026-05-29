@@ -160,11 +160,14 @@ const ProductDetailModal = ({ product, onClose }) => {
             </div>
             <div className="grid-3">
               <div>
-                <div className="muted" style={{ fontSize: 11 }}>מחיר עלות (ראשי)</div>
+                <div className="muted" style={{ fontSize: 11 }}>מחיר עלות (ללא מע״מ)</div>
                 {editing ? (
-                  <input className="input" type="number" step="0.01" value={cost}
-                         onChange={(e) => setCost(+e.target.value)}
-                         style={{ fontSize: 18, fontWeight: 700, padding: '4px 8px' }} />
+                  <>
+                    <input className="input" type="number" step="0.01" value={cost}
+                           onChange={(e) => setCost(+e.target.value)}
+                           style={{ fontSize: 18, fontWeight: 700, padding: '4px 8px' }} />
+                    <span className="field-hint">כולל מע״מ: ₪{(Number(cost || 0) * 1.18).toFixed(2)}</span>
+                  </>
                 ) : (
                   <div style={{ fontSize: 20, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                     ₪{Number(cost || 0).toFixed(2)}
@@ -172,7 +175,7 @@ const ProductDetailModal = ({ product, onClose }) => {
                 )}
               </div>
               <div>
-                <div className="muted" style={{ fontSize: 11 }}>מחיר צרכן</div>
+                <div className="muted" style={{ fontSize: 11 }}>מחיר צרכן (כולל מע״מ)</div>
                 {editing ? (
                   <input className="input" type="number" step="0.01"
                          value={price} onChange={(e) => setPrice(+e.target.value)}
@@ -184,9 +187,9 @@ const ProductDetailModal = ({ product, onClose }) => {
                 )}
               </div>
               <div>
-                <div className="muted" style={{ fontSize: 11 }}>מרווח</div>
+                <div className="muted" style={{ fontSize: 11 }}>מרווח (נטו)</div>
                 <div style={{ fontSize: 20, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--ok)' }}>
-                  {(((price - cost) / price) * 100).toFixed(0)}%
+                  {(() => { const pn = price / 1.18; return pn > 0 ? (((pn - cost) / pn) * 100).toFixed(0) : '0'; })()}%
                 </div>
               </div>
             </div>
@@ -457,6 +460,7 @@ const AddProductModal = ({ onClose, initialBarcode }) => {
   });
   const set = (k, v) => setForm({ ...form, [k]: v });
   const [saving, setSaving] = React.useState(false);
+  const [costInclVat, setCostInclVat] = React.useState(false);  // אם דלוק — העלות שהוזנה כוללת מע"מ, תומר ל-÷1.18
 
   const saveProduct = async () => {
     if (!form.name || !form.sku) {
@@ -468,7 +472,8 @@ const AddProductModal = ({ onClose, initialBarcode }) => {
     const { error } = await window.sb.from('products').insert({
       name: form.name, barcode: String(form.sku), category: catLabel,
       supplier: form.supplier || 'לא ידוע',
-      cost_price: Number(form.cost) || 0, sell_price: Number(form.price) || 0,
+      cost_price: Number((costInclVat ? (Number(form.cost) || 0) / 1.18 : (Number(form.cost) || 0)).toFixed(2)),
+      sell_price: Number(form.price) || 0,
       stock_mikado: Number(form.mikado) || 0, stock_kochav: Number(form.kohav) || 0,
       is_active: true,
     });
@@ -529,19 +534,36 @@ const AddProductModal = ({ onClose, initialBarcode }) => {
         </div>
         <div className="grid-2">
           <div className="field">
-            <label className="field-label">מחיר עלות (₪)</label>
+            <label className="field-label">מחיר עלות {costInclVat ? '(כולל מע״מ)' : '(ללא מע״מ)'}</label>
             <input className="input" type="number" step="0.01" placeholder="0.00"
                    value={form.cost} onChange={(e) => set('cost', e.target.value)} />
-          </div>
-          <div className="field">
-            <label className="field-label">מחיר צרכן (₪)</label>
-            <input className="input" type="number" step="0.01" placeholder="0.00"
-                   value={form.price} onChange={(e) => set('price', e.target.value)} />
-            {form.cost && form.price && (
+            <label className="row" style={{ gap: 6, marginTop: 6, fontSize: 11, cursor: 'pointer' }}>
+              <input type="checkbox" checked={costInclVat}
+                     onChange={(e) => setCostInclVat(e.target.checked)} />
+              <span className="muted">הזנתי כולל מע״מ — יומר אוטומטית לעלות נטו (÷1.18)</span>
+            </label>
+            {form.cost > 0 && (
               <span className="field-hint">
-                מרווח: {(((form.price - form.cost) / form.price) * 100).toFixed(0)}%
+                {costInclVat
+                  ? `עלות נטו שתישמר: ₪${(form.cost / 1.18).toFixed(2)}`
+                  : `כולל מע״מ: ₪${(form.cost * 1.18).toFixed(2)}`}
               </span>
             )}
+          </div>
+          <div className="field">
+            <label className="field-label">מחיר צרכן (כולל מע״מ ₪)</label>
+            <input className="input" type="number" step="0.01" placeholder="0.00"
+                   value={form.price} onChange={(e) => set('price', e.target.value)} />
+            {form.cost > 0 && form.price > 0 && (() => {
+              const costExcl = costInclVat ? form.cost / 1.18 : Number(form.cost);
+              const priceNet = form.price / 1.18;
+              const mg = priceNet > 0 ? ((priceNet - costExcl) / priceNet) * 100 : 0;
+              return (
+                <span className="field-hint">
+                  מרווח: {mg.toFixed(0)}% · מחיר נטו ₪{priceNet.toFixed(2)}
+                </span>
+              );
+            })()}
           </div>
         </div>
         <div>
