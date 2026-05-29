@@ -25,22 +25,39 @@ Object.assign(window, {
   PROMO_CATEGORIES: [], PROMO_BY_BARCODE: {},
 });
 
+// Supabase PostgREST max_rows = 1000. טוענים בדפים עד שנגמר.
+async function fetchAll(table, select = '*', opts = {}) {
+  const sb = window.sb;
+  const PAGE = 1000;
+  let all = [], offset = 0;
+  while (true) {
+    let q = sb.from(table).select(select).range(offset, offset + PAGE - 1);
+    if (opts.order) q = q.order(opts.order, { ascending: opts.asc ?? true });
+    const { data, error } = await q;
+    if (error) { console.warn(`fetchAll(${table}):`, error.message); break; }
+    if (!data || data.length === 0) break;
+    all = all.concat(data);
+    if (data.length < PAGE) break;   // last page
+    offset += PAGE;
+  }
+  return all;
+}
+
 async function loadAllData() {
   const sb = window.sb;
-  const [prodR, monR, dayR, invR, dealR, transR, ordR, detR, appR, pcatR, ppromoR] = await Promise.all([
-    sb.from('products').select('*').limit(10000),
+  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR] = await Promise.all([
+    fetchAll('products'),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
-    sb.from('supplier_inventory').select('*'),
-    sb.from('import_deals').select('*'),
-    sb.from('transfers').select('*'),
-    sb.from('order_recommendations').select('*'),
+    fetchAll('supplier_inventory'),
+    fetchAll('import_deals'),
+    fetchAll('transfers'),
+    fetchAll('order_recommendations'),
     sb.from('daily_details').select('*').order('summary_date', { ascending: false }).limit(60),
     sb.from('product_approvals').select('barcode'),
     sb.from('promo_categories').select('*').order('price_total'),
     sb.from('product_promos').select('*'),
   ]);
-  const products = prodR.data || [];
 
   // ─── מבצעי לקוחות (סוגי מבצעים + שיוך לכל מוצר) ───
   const PROMO_CATEGORIES = (pcatR.data || []).map((c) => {
@@ -127,14 +144,14 @@ async function loadAllData() {
 
   // שווי מלאי לפי ספק/חודש
   const invMap = {};
-  (invR.data || []).forEach((r) => {
+  (invRows || []).forEach((r) => {
     if (!invMap[r.month]) invMap[r.month] = { m: mlabel(r.month), values: {} };
     invMap[r.month].values[r.supplier] = n(r.value);
   });
   const INVENTORY_VALUE_BY_MONTH = Object.keys(invMap).sort().map((k) => invMap[k]);
 
   // מבצעים
-  const PROMOTIONS = (dealR.data || []).map((d) => ({
+  const PROMOTIONS = (dealRows || []).map((d) => ({
     id: d.id, supplier: d.supplier || '', title: d.title || d.product_name || '', ends: d.valid_until || '',
     items: 0, barcode: d.barcode || '',
     deal_cost: d.deal_cost || 0, regular_cost: d.regular_cost || 0, sell_price: d.sell_price || 0,
@@ -144,7 +161,7 @@ async function loadAllData() {
 
   // העברות
   const stMap = { 'ממתין': 'pending', 'בוצע': 'completed', 'בוטל': 'cancelled' };
-  const TRANSFERS = (transR.data || []).map((t, i) => ({
+  const TRANSFERS = (transRows || []).map((t, i) => ({
     id: 'T-' + (i + 1), from: t.from_branch === 'מיקדו' ? 'mikado' : 'kohav',
     to: t.to_branch === 'מיקדו' ? 'mikado' : 'kohav', items: 1, units: n(t.quantity),
     status: stMap[t.status] || 'pending', tone: t.status === 'בוצע' ? 'ok' : 'warn',
@@ -153,7 +170,7 @@ async function loadAllData() {
 
   // הזמנות (קיבוץ המלצות לפי ספק)
   const ordBySup = {};
-  (ordR.data || []).forEach((o) => { (ordBySup[o.supplier] = ordBySup[o.supplier] || []).push(o); });
+  (ordRows || []).forEach((o) => { (ordBySup[o.supplier] = ordBySup[o.supplier] || []).push(o); });
   const ORDERS = Object.keys(ordBySup).map((sup, i) => ({
     id: '#' + (5100 + i), supplier: sup, branch: 'both', date: '', eta: '',
     items: ordBySup[sup].length, sum: 0, status: 'pending', tone: 'warn',
