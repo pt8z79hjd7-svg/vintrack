@@ -16,24 +16,24 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
   const now = Date.now();
   const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-  // classify: מוצר "ממתין" = חסר עלות או מחיר, או חדש ב-7 ימים ולא אושר
+  // classify: מוצר "ממתין" = חסר עלות או מחיר (ולא אושר)
+  // הערה: created_at לא אמין (upsert מאפס) — לכן isNew מבוסס על מלאי/מכירות, לא תאריך
   const classified = PRODUCTS.map(p => {
     const isApproved = approved.has(p.sku);
     const missingCost = !p.cost || p.cost <= 0;
     const missingPrice = !p.price || p.price <= 0;
     const createdMs = p.created_at ? new Date(p.created_at).getTime() : 0;
-    const isNew = createdMs > now - WEEK_MS;
     const needsAttention = missingCost || missingPrice;
-    const isRecentNew = isNew && !missingCost && !missingPrice;
-    return { ...p, isApproved, missingCost, missingPrice, isNew, createdMs, needsAttention, isRecentNew };
+    const hasStock = (p.stock?.mikado || 0) + (p.stock?.kohav || 0) > 0;
+    return { ...p, isApproved, missingCost, missingPrice, createdMs, needsAttention, hasStock };
   });
 
-  // filter — מוצרים מאושרים לא מופיעים בכלל (חוץ מפילטר "מאושרים")
-  let items = classified.filter(p => !p.isApproved && (p.needsAttention || p.isRecentNew));
+  // filter — רק מוצרים שחסרים להם מחיר/עלות ולא אושרו
+  let items = classified.filter(p => !p.isApproved && p.needsAttention);
   if (filter === 'missing_cost') items = items.filter(p => p.missingCost);
   if (filter === 'missing_price') items = items.filter(p => p.missingPrice);
-  if (filter === 'new') items = items.filter(p => p.isNew);
-  if (filter === 'ready') items = items.filter(p => !p.missingCost && !p.missingPrice);
+  if (filter === 'has_stock') items = items.filter(p => p.hasStock);
+  if (filter === 'no_stock') items = items.filter(p => !p.hasStock);
 
   if (search) {
     const q = search.toLowerCase();
@@ -48,11 +48,11 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
   });
 
   const pending = classified.filter(p => !p.isApproved);
-  const countAll = pending.filter(p => p.needsAttention || p.isRecentNew).length;
+  const countAll = pending.filter(p => p.needsAttention).length;
   const countMissingCost = pending.filter(p => p.missingCost).length;
   const countMissingPrice = pending.filter(p => p.missingPrice).length;
-  const countNew = pending.filter(p => p.isNew && !p.isApproved).length;
-  const countReady = pending.filter(p => p.isRecentNew).length;
+  const countHasStock = pending.filter(p => p.needsAttention && p.hasStock).length;
+  const countNoStock = pending.filter(p => p.needsAttention && !p.hasStock).length;
   const countApproved = classified.filter(p => p.isApproved).length;
 
   const fmtDate = (iso) => {
@@ -142,7 +142,7 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
           </div>
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
             {countAll} ממתינים · {countMissingCost} ללא עלות · {countMissingPrice} ללא מחיר
-            {countReady > 0 ? ` · ${countReady} מוכנים` : ''}
+            {countHasStock > 0 ? ` · ${countHasStock} מתוכם במלאי` : ''}
             {countApproved > 0 ? ` · ${countApproved} אושרו` : ''}
           </div>
         </div>
@@ -152,10 +152,10 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
         {[
           ['all', `הכל (${countAll})`, ''],
+          ['has_stock', `במלאי (${countHasStock})`, 'warn'],
           ['missing_cost', `ללא עלות (${countMissingCost})`, 'warn'],
           ['missing_price', `ללא מחיר (${countMissingPrice})`, 'warn'],
-          ['new', `חדשים (${countNew})`, 'accent'],
-          ...(countReady > 0 ? [['ready', `מוכנים לאישור (${countReady})`, 'ok']] : []),
+          ...(countNoStock > 0 ? [['no_stock', `ללא מלאי (${countNoStock})`, '']] : []),
         ].map(([id, label, tone]) => (
           <button key={id}
             className={`badge ${filter === id ? (tone || 'ok') : ''}`}
@@ -213,7 +213,7 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
                       onClick={() => !isEd && onOpen && onOpen('detail', p)}>
                     <td>
                       <div className="row" style={{ gap: 4 }}>
-                        {p.isNew && <span className="badge accent" style={{ fontSize: 10 }}>חדש</span>}
+                        {p.hasStock && <span className="badge accent" style={{ fontSize: 10 }}>במלאי</span>}
                         {p.missingCost && <span className="badge warn" style={{ fontSize: 10 }}>ללא עלות</span>}
                         {p.missingPrice && <span className="badge warn" style={{ fontSize: 10 }}>ללא מחיר</span>}
                         {!p.missingCost && !p.missingPrice && <span className="badge ok" style={{ fontSize: 10 }}>מוכן</span>}
