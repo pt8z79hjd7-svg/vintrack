@@ -35,6 +35,8 @@ function App() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [activeBranch, setActiveBranch] = useState('both');
   const [activeSupplier, setActiveSupplier] = useState(null); // for order builder
+  const [globalQ, setGlobalQ] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   useLiveData();                                   // re-render אוטומטי בכל refreshData
   const lastUpdated = useLastUpdated();            // לסטטוס "עודכן לפני…"
@@ -113,12 +115,32 @@ function App() {
           </button>
         </div>
 
-        <div className="search-bar search-with-scan">
+        <div className="search-bar search-with-scan" style={{ position: 'relative' }}>
           <ISearch size={15} />
-          <input placeholder="חיפוש מוצר, ברקוד, ספק…" />
+          <input placeholder="חיפוש מוצר, ברקוד, ספק…" value={globalQ}
+                 onChange={(e) => setGlobalQ(e.target.value)}
+                 onFocus={() => setSearchFocused(true)}
+                 onBlur={() => setTimeout(() => setSearchFocused(false), 200)} />
           <button className="scan-trigger" onClick={() => setScannerOpen(true)} title="סריקה במצלמה">
             <ICamera size={16} />
           </button>
+          {searchFocused && globalQ.length >= 2 && (() => {
+            const q = globalQ.toLowerCase();
+            const hits = PRODUCTS.filter(p => p.name.toLowerCase().includes(q) || p.sku.includes(globalQ) || p.supplier.toLowerCase().includes(q)).slice(0, 8);
+            if (!hits.length) return (
+              <div className="search-dropdown"><div style={{ padding: '12px 16px', color: 'var(--ink-3)', fontSize: 13 }}>לא נמצא</div></div>
+            );
+            return (
+              <div className="search-dropdown">
+                {hits.map(p => (
+                  <div key={p.id} className="search-hit" onMouseDown={() => { handleOpen('detail', p); setGlobalQ(''); }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>{p.supplier} · {p.sku} · מלאי: {p.stock.mikado + p.stock.kohav}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
 
         <div className="topbar-actions">
