@@ -210,7 +210,7 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
                 return (
                   <tr key={p.id}
                       style={{ background: isEd ? 'var(--accent-soft)' : undefined, cursor: 'pointer' }}
-                      onClick={() => !isEd && onOpen && onOpen(p)}>
+                      onClick={() => !isEd && onOpen && onOpen('detail', p)}>
                     <td>
                       <div className="row" style={{ gap: 4 }}>
                         {p.isNew && <span className="badge accent" style={{ fontSize: 10 }}>חדש</span>}
