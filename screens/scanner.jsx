@@ -207,9 +207,27 @@ const ScannerModal = ({ onClose, onFound, onAdd }) => {
               <div className="row" style={{ gap: 14, fontSize: 13, flexWrap: 'wrap' }}>
                 <span>מיקדו: <strong>{scanned.product.stock?.mikado ?? 0}</strong></span>
                 <span>כוכב: <strong>{scanned.product.stock?.kohav ?? 0}</strong></span>
-                {scanned.product.price > 0 && <span>מחיר: <strong>₪{scanned.product.price.toFixed(0)}</strong></span>}
+                <span>סה״כ: <strong>{(scanned.product.stock?.mikado ?? 0) + (scanned.product.stock?.kohav ?? 0)}</strong></span>
+                {scanned.product.price > 0 && <span>מחיר מכירה: <strong>₪{scanned.product.price.toFixed(0)}</strong></span>}
                 {scanned.product.cost > 0 && <span>עלות: <strong>₪{scanned.product.cost.toFixed(0)}</strong></span>}
               </div>
+              {/* רווח גולמי — (מחיר÷1.18) − עלות, צבע לפי יעד הרווח */}
+              {scanned.product.price > 0 && scanned.product.cost > 0 && (() => {
+                const net = scanned.product.price / 1.18;
+                const profit = net - scanned.product.cost;
+                const margin = net > 0 ? (profit / net) * 100 : 0;
+                const target = (window.SETTINGS && Number(window.SETTINGS.profitTarget)) || 25;
+                const col = margin >= target ? 'var(--ok)' : margin >= 0 ? 'var(--warn)' : 'var(--danger)';
+                return (
+                  <div className="row" style={{ gap: 14, fontSize: 13, marginTop: 8, paddingTop: 8,
+                                                borderTop: '1px solid var(--line)', flexWrap: 'wrap' }}>
+                    <span>רווח גולמי ליח׳: <strong style={{ color: col }}>₪{profit.toFixed(1)}</strong></span>
+                    <span>מרווח: <strong style={{ color: col }}>{margin.toFixed(0)}%</strong>
+                      <span className="muted" style={{ fontSize: 11 }}> (יעד {target}%)</span>
+                    </span>
+                  </div>
+                );
+              })()}
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
                 ספק: {scanned.product.supplier}
                 {scanned.product.category && ` · ${scanned.product.category}`}
