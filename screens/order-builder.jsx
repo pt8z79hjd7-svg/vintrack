@@ -11,7 +11,7 @@ const SupplierHub = ({ onSelectSupplier }) => {
     const totalValue = items.reduce((acc, p) => acc + (p.stock.mikado + p.stock.kohav) * p.cost, 0);
     const lowItems = items.filter(p => {
       const min = p.min_stock > 0 ? p.min_stock : dmin;
-      return p.stock.mikado < min || p.stock.kohav < min;
+      return (p.stock.mikado + p.stock.kohav) < min;
     }).length;
     const last = LAST_RECEIVED[s.id];
     const past = PAST_ORDERS[s.id] || [];
@@ -24,10 +24,9 @@ const SupplierHub = ({ onSelectSupplier }) => {
     let units = 0, value = 0;
     PRODUCTS.forEach(p => {
       const min = p.min_stock > 0 ? p.min_stock : dmin;
-      const needM = Math.max(0, min - p.stock.mikado);
-      const needK = Math.max(0, min - p.stock.kohav);
-      const need = needM + needK;
-      if (need > 0) { rows.push({ ...p, need, needM, needK, min }); units += need; value += need * p.cost; }
+      const totalStock = p.stock.mikado + p.stock.kohav;
+      const need = Math.max(0, min - totalStock);
+      if (need > 0) { rows.push({ ...p, need, min }); units += need; value += need * p.cost; }
     });
     const bySup = {};
     rows.forEach(r => { (bySup[r.supplier] = bySup[r.supplier] || []).push(r); });
@@ -88,6 +87,7 @@ const SupplierHub = ({ onSelectSupplier }) => {
                       <th>מוצר</th>
                       <th style={{ textAlign: 'center' }}>מיקדו</th>
                       <th style={{ textAlign: 'center' }}>כוכב</th>
+                      <th style={{ textAlign: 'center' }}>סה״כ</th>
                       <th style={{ textAlign: 'center' }}>מינ׳</th>
                       <th style={{ textAlign: 'center' }}>להזמין</th>
                       <th style={{ textAlign: 'end' }}>עלות שורה</th>
@@ -98,8 +98,9 @@ const SupplierHub = ({ onSelectSupplier }) => {
                       <tr key={p.id}>
                         <td className="mono-tiny">{p.sku}</td>
                         <td>{p.name}</td>
-                        <td style={{ textAlign: 'center', color: p.stock.mikado < p.min ? 'var(--danger)' : 'inherit' }}>{p.stock.mikado}</td>
-                        <td style={{ textAlign: 'center', color: p.stock.kohav < p.min ? 'var(--danger)' : 'inherit' }}>{p.stock.kohav}</td>
+                        <td style={{ textAlign: 'center' }}>{p.stock.mikado}</td>
+                        <td style={{ textAlign: 'center' }}>{p.stock.kohav}</td>
+                        <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--danger)' }}>{p.stock.mikado + p.stock.kohav}</td>
                         <td style={{ textAlign: 'center' }}>{p.min}</td>
                         <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--accent-strong)' }}>{p.need}</td>
                         <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(p.need * p.cost).toLocaleString('he-IL')}</td>
@@ -258,13 +259,11 @@ const OrderBuilder = ({ supplierId, onBack }) => {
     );
   }, [searchQ, products]);
 
-  // הצעת כמות: כמה להזמין כדי להגיע למינימום (min_stock) לפי הסניף הנבחר.
-  // min_stock = מינ׳ רצוי לסניף. "שניהם" → ממלא כל סניף עד המינימום.
+  // הצעת כמות: כמה להזמין כדי להגיע למינימום הכולל (min_stock = מינ׳ חנותי, שני הסניפים יחד).
   const suggest = (p) => {
     const min = p.min_stock > 0 ? p.min_stock : ((window.SETTINGS && window.SETTINGS.defaultMin) || 3);
-    if (branch === 'mikado') return Math.max(0, min - p.stock.mikado);
-    if (branch === 'kohav')  return Math.max(0, min - p.stock.kohav);
-    return Math.max(0, min - p.stock.mikado) + Math.max(0, min - p.stock.kohav);
+    const totalStock = p.stock.mikado + p.stock.kohav;
+    return Math.max(0, min - totalStock);
   };
 
   return (

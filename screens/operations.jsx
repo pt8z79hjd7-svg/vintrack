@@ -97,16 +97,17 @@ const Transfers = ({ activeBranch = 'both' }) => {
     return PRODUCTS
       .map(p => {
         const min = p.min_stock > 0 ? p.min_stock : dmin;
+        const per = Math.max(1, Math.ceil(min / 2));    // יעד מאוזן לכל סניף (~חצי מהמינ׳ הכולל)
         const m = p.stock.mikado, k = p.stock.kohav;
         let fromBranch = null, suggestedQty = 0;
-        if (k < min && m > min) {                       // כוכב חסר, מיקדו עודף
+        if (k < per && m > per) {                        // כוכב מתחת לאיזון, מיקדו עודף
           fromBranch = 'mikado';
-          suggestedQty = Math.min(min - k, m - min);
-        } else if (m < min && k > min) {                // מיקדו חסר, כוכב עודף
+          suggestedQty = Math.min(per - k, m - per);
+        } else if (m < per && k > per) {                 // מיקדו מתחת לאיזון, כוכב עודף
           fromBranch = 'kohav';
-          suggestedQty = Math.min(min - m, k - min);
+          suggestedQty = Math.min(per - m, k - per);
         }
-        return (fromBranch && suggestedQty > 0) ? { ...p, fromBranch, suggestedQty, min } : null;
+        return (fromBranch && suggestedQty > 0) ? { ...p, fromBranch, suggestedQty, min, per } : null;
       })
       .filter(Boolean)
       .sort((a, b) => b.suggestedQty - a.suggestedQty)
