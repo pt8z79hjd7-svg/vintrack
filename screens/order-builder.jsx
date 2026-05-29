@@ -5,7 +5,11 @@ const SupplierHub = ({ onSelectSupplier }) => {
   const supplierData = SUPPLIERS.map(s => {
     const items = PRODUCTS.filter(p => p.supplier === s.id);
     const totalValue = items.reduce((acc, p) => acc + (p.stock.mikado + p.stock.kohav) * p.cost, 0);
-    const lowItems = items.filter(p => (p.stock.mikado + p.stock.kohav) < 8).length;
+    const dmin = (window.SETTINGS && window.SETTINGS.defaultMin) || 3;
+    const lowItems = items.filter(p => {
+      const min = p.min_stock > 0 ? p.min_stock : dmin;
+      return p.stock.mikado < min || p.stock.kohav < min;
+    }).length;
     const last = LAST_RECEIVED[s.id];
     const past = PAST_ORDERS[s.id] || [];
     return { ...s, items, totalValue, lowItems, last, past };
@@ -170,10 +174,13 @@ const OrderBuilder = ({ supplierId, onBack }) => {
     );
   }, [searchQ, products]);
 
-  // Suggest quantity: max - total stock
+  // הצעת כמות: כמה להזמין כדי להגיע למינימום (min_stock) לפי הסניף הנבחר.
+  // min_stock = מינ׳ רצוי לסניף. "שניהם" → ממלא כל סניף עד המינימום.
   const suggest = (p) => {
-    const totalStock = p.stock.mikado + p.stock.kohav;
-    return Math.max(0, 12 - totalStock);
+    const min = p.min_stock > 0 ? p.min_stock : ((window.SETTINGS && window.SETTINGS.defaultMin) || 3);
+    if (branch === 'mikado') return Math.max(0, min - p.stock.mikado);
+    if (branch === 'kohav')  return Math.max(0, min - p.stock.kohav);
+    return Math.max(0, min - p.stock.mikado) + Math.max(0, min - p.stock.kohav);
   };
 
   return (

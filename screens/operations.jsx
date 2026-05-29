@@ -90,22 +90,28 @@ const Transfers = ({ activeBranch = 'both' }) => {
   const [showModal, setShowModal] = useState(false);
   useLiveData();
 
-  // הצעות חכמות: מוצרים שבסניף אחד יש עודף ובשני 0 או שלילי
+  // הצעות חכמות: סניף אחד מתחת למינימום (min_stock), השני עם עודף מעל המינימום.
+  // מעביר כמה שצריך כדי להביא את החסר למינימום — בלי להוריד את התורם מתחת למינימום שלו.
   const suggestions = React.useMemo(() => {
+    const dmin = (window.SETTINGS && window.SETTINGS.defaultMin) || 3;
     return PRODUCTS
-      .filter(p => {
-        const m = p.stock.mikado, k = p.stock.kohav;
-        return (m > 5 && k <= 0) || (k > 5 && m <= 0);
-      })
       .map(p => {
-        const fromBranch = p.stock.mikado > p.stock.kohav ? 'mikado' : 'kohav';
-        const fromStock = fromBranch === 'mikado' ? p.stock.mikado : p.stock.kohav;
-        const suggestedQty = Math.floor(fromStock / 2);
-        return { ...p, fromBranch, suggestedQty };
+        const min = p.min_stock > 0 ? p.min_stock : dmin;
+        const m = p.stock.mikado, k = p.stock.kohav;
+        let fromBranch = null, suggestedQty = 0;
+        if (k < min && m > min) {                       // כוכב חסר, מיקדו עודף
+          fromBranch = 'mikado';
+          suggestedQty = Math.min(min - k, m - min);
+        } else if (m < min && k > min) {                // מיקדו חסר, כוכב עודף
+          fromBranch = 'kohav';
+          suggestedQty = Math.min(min - m, k - min);
+        }
+        return (fromBranch && suggestedQty > 0) ? { ...p, fromBranch, suggestedQty, min } : null;
       })
+      .filter(Boolean)
       .sort((a, b) => b.suggestedQty - a.suggestedQty)
-      .slice(0, 8);
-  }, []);
+      .slice(0, 12);
+  }, [window.LAST_REFRESH]);
 
   return (
     <div className="page">
