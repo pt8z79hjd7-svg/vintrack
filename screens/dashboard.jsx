@@ -249,6 +249,49 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         );
       })()}
 
+      {/* ─── רווח נטו (כלל החנות — הוצאות לא מפוצלות לסניף) ─── */}
+      {(() => {
+        const F = (window.FINANCE && window.FINANCE.current) || {};
+        const gross = F.grossProfit || monthRaw.profit || 0;
+        const inc = F.totalIncome || 0;
+        const exp = F.totalExpense || 0;
+        const net = gross + inc - exp;
+        const rev = F.revenue || monthRaw.total || 0;
+        const netMargin = rev > 0 ? (net / rev) * 100 : 0;
+        const hasFinance = exp > 0 || inc > 0;
+        const netOK = net >= 0;
+        return (
+          <div className="card" style={{ padding: '16px 20px', borderRight: `3px solid ${netOK ? 'var(--ok)' : 'var(--danger)'}` }}>
+            <div className="between" style={{ alignItems: 'flex-start', marginBottom: 12 }}>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>רווח נטו · {monthRaw.m || ''} · כלל החנות</div>
+                <div style={{ fontSize: 26, fontWeight: 800, color: netOK ? 'var(--ok)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtCurrency(Math.round(net))}
+                </div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                  מרווח נטו {netMargin.toFixed(1)}% מהמחזור{hasFinance ? '' : ' (ללא הוצאות עדיין)'}
+                </div>
+              </div>
+              <button className="btn btn-sm btn-ghost" onClick={() => onNav('settings')}>
+                {hasFinance ? 'עדכן הוצאות →' : 'הזן הוצאות →'}
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12.5, alignItems: 'center' }}>
+              <span className="muted">רווח גולמי <b style={{ color: 'var(--ink-1)' }}>{fmtCurrency(Math.round(gross))}</b></span>
+              <span style={{ color: 'var(--ink-3)' }}>+</span>
+              <span className="muted">הכנסות חוץ-קופה <b style={{ color: 'var(--accent-strong)' }}>{fmtCurrency(Math.round(inc))}</b></span>
+              <span style={{ color: 'var(--ink-3)' }}>−</span>
+              <span className="muted">הוצאות <b style={{ color: 'var(--danger)' }}>{fmtCurrency(Math.round(exp))}</b></span>
+            </div>
+            {!hasFinance && (
+              <div className="muted" style={{ fontSize: 11, marginTop: 10, lineHeight: 1.5 }}>
+                💡 עדיין לא הוזנו הוצאות לחודש זה. לחישוב רווח נטו מדויק — הזן שכר, שכירות, חשמל וכו׳ בהגדרות.
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ─── סיכום מכירות יומי + חודשי מעודכן ─── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Card

@@ -25,6 +25,7 @@ Object.assign(window, {
   APPROVED_PRODUCTS: new Set(),
   PROMO_CATEGORIES: [], PROMO_BY_BARCODE: {},
   SETTINGS: { profitTarget: 25, defaultMin: 3, categoryMin: {} },
+  FINANCE: { byMonth: {}, current: { totalExpense: 0, totalIncome: 0, grossProfit: 0, revenue: 0, netProfit: 0, netMargin: 0 } },
 });
 
 // Supabase PostgREST max_rows = 1000. טוענים בדפים עד שנגמר.
@@ -47,7 +48,7 @@ async function fetchAll(table, select = '*', opts = {}) {
 
 async function loadAllData() {
   const sb = window.sb;
-  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR] = await Promise.all([
+  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR] = await Promise.all([
     fetchAll('products'),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
@@ -60,6 +61,7 @@ async function loadAllData() {
     sb.from('promo_categories').select('*').order('price_total'),
     sb.from('product_promos').select('*'),
     sb.from('settings').select('key,value'),   // הגדרות גלובליות (יעד רווח, מינ׳ לפי קטגוריה) — graceful אם הטבלה חסרה
+    sb.from('monthly_finance').select('*'),    // הוצאות + הכנסות חוץ-קופה — graceful אם הטבלה חסרה
   ]);
 
   // ─── מבצעי לקוחות (סוגי מבצעים + שיוך לכל מוצר) ───
@@ -128,7 +130,7 @@ async function loadAllData() {
   const MONTHLY = (monR.data || [])
     .sort((a, b) => String(a.month).localeCompare(String(b.month)))
     .map((r) => ({
-      m: mlabel(r.month), total: n(r.revenue_total), mikado: n(r.revenue_mikado), kohav: n(r.revenue_kochav),
+      month: r.month, m: mlabel(r.month), total: n(r.revenue_total), mikado: n(r.revenue_mikado), kohav: n(r.revenue_kochav),
       profit: n(r.profit_est), margin: n(r.margin_pct), days: n(r.days_active),
       extra: n(r.additional_income), current: r.month === curMonth,
     }));
@@ -235,11 +237,40 @@ async function loadAllData() {
     } catch { /* noop */ }
   }
 
+  // ─── הוצאות + הכנסות חוץ-קופה לפי חודש (monthly_finance) — לחישוב רווח נטו ───
+  // נטען מ-Supabase; אם הטבלה חסרה/ריקה — fallback ל-localStorage (מכשיר ראשי לפני SQL).
+  const FIN_EXP = ['salaries', 'rent', 'electricity', 'water', 'arnona', 'management', 'other_expense'];
+  const FIN_INC = ['wolt', 'tenbis', 'external_sales'];
+  const mkFin = (row) => {
+    const o = { month: row.month || '', notes: row.notes || '' };
+    FIN_EXP.concat(FIN_INC).forEach((f) => { o[f] = n(row[f]); });
+    o.totalExpense = FIN_EXP.reduce((a, f) => a + o[f], 0);
+    o.totalIncome = FIN_INC.reduce((a, f) => a + o[f], 0);
+    return o;
+  };
+  const FINANCE = { byMonth: {}, current: null };
+  let finRows = (finR && finR.data) ? finR.data : [];
+  if (!finRows.length) {
+    try {
+      const ls = JSON.parse(localStorage.getItem('vintrack_finance') || '{}');
+      finRows = Object.keys(ls).map((m) => ({ month: m, ...ls[m] }));
+    } catch { /* noop */ }
+  }
+  finRows.forEach((r) => { if (r.month) FINANCE.byMonth[r.month] = mkFin(r); });
+  FINANCE.current = FINANCE.byMonth[curMonth] || mkFin({ month: curMonth });
+  // צירוף רווח גולמי + הכנסות חוץ-קופה − הוצאות = רווח נטו (לחודש הנוכחי)
+  const _curM = MONTHLY.find((x) => x.current) || null;
+  FINANCE.current.grossProfit = _curM ? _curM.profit : 0;
+  FINANCE.current.revenue = _curM ? _curM.total : 0;
+  FINANCE.current.netProfit = FINANCE.current.grossProfit + FINANCE.current.totalIncome - FINANCE.current.totalExpense;
+  FINANCE.current.netMargin = FINANCE.current.revenue > 0
+    ? (FINANCE.current.netProfit / FINANCE.current.revenue) * 100 : 0;
+
   Object.assign(window, {
     BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH, INVENTORY_VALUE_TOTAL,
     DAILY_DETAILS, APPROVED_PRODUCTS,
-    PROMO_CATEGORIES, PROMO_BY_BARCODE, SETTINGS,
+    PROMO_CATEGORIES, PROMO_BY_BARCODE, SETTINGS, FINANCE,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
     LAST_REFRESH: Date.now(),
   });

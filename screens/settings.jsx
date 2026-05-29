@@ -120,6 +120,79 @@ const Settings = ({ activeBranch = 'both' }) => {
   const [pTotal, setPTotal] = useState('');
   const [pBusy, setPBusy] = useState(false);
 
+  // ─── הוצאות + הכנסות חוץ-קופה (monthly_finance) → רווח נטו ───
+  const FIN_EXP_FIELDS = [
+    { k: 'salaries', label: 'שכר עובדים' },
+    { k: 'rent', label: 'שכירות' },
+    { k: 'electricity', label: 'חשמל' },
+    { k: 'water', label: 'מים' },
+    { k: 'arnona', label: 'ארנונה' },
+    { k: 'management', label: 'דמי ניהול' },
+    { k: 'other_expense', label: 'הוצאות אחרות' },
+  ];
+  const FIN_INC_FIELDS = [
+    { k: 'wolt', label: 'Wolt' },
+    { k: 'tenbis', label: 'תן ביס' },
+    { k: 'external_sales', label: 'מכירות חיצוניות' },
+  ];
+  const curMonthKey = new Date().toISOString().slice(0, 7);
+  const [finMonth, setFinMonth] = useState(curMonthKey);
+  const [finVals, setFinVals] = useState({});
+  const [finBusy, setFinBusy] = useState(false);
+
+  // רשימת חודשים לבחירה — מתוך MONTHLY (12 אחרונים), כולל החודש הנוכחי
+  const finMonths = React.useMemo(() => {
+    const set = new Set([curMonthKey]);
+    (window.MONTHLY || []).forEach(m => { if (m.month) set.add(m.month); });
+    return Array.from(set).sort().reverse().slice(0, 18);
+  }, [window.LAST_REFRESH]);
+
+  // אכלוס שדות מתוך FINANCE לפי החודש הנבחר
+  React.useEffect(() => {
+    const row = (window.FINANCE?.byMonth || {})[finMonth] || {};
+    const init = {};
+    FIN_EXP_FIELDS.concat(FIN_INC_FIELDS).forEach(f => {
+      init[f.k] = (row[f.k] != null && row[f.k] !== 0) ? row[f.k] : '';
+    });
+    init.notes = row.notes || '';
+    setFinVals(init);
+  }, [finMonth, window.LAST_REFRESH]);
+
+  // תצוגה מקדימה חיה: הוצאות, הכנסות, רווח גולמי (מ-MONTHLY), רווח נטו
+  const finPreview = React.useMemo(() => {
+    const exp = FIN_EXP_FIELDS.reduce((a, f) => a + (Number(finVals[f.k]) || 0), 0);
+    const inc = FIN_INC_FIELDS.reduce((a, f) => a + (Number(finVals[f.k]) || 0), 0);
+    const M = (window.MONTHLY || []).find(x => x.month === finMonth) || null;
+    const gross = M ? M.profit : 0;
+    const revenue = M ? M.total : 0;
+    const net = gross + inc - exp;
+    const margin = revenue > 0 ? (net / revenue) * 100 : 0;
+    return { exp, inc, gross, revenue, net, margin, hasMonth: !!M };
+  }, [finVals, finMonth, window.LAST_REFRESH]);
+
+  const saveFinance = async () => {
+    setFinBusy(true);
+    const payload = { month: finMonth, notes: finVals.notes || '' };
+    FIN_EXP_FIELDS.concat(FIN_INC_FIELDS).forEach(f => { payload[f.k] = Number(finVals[f.k]) || 0; });
+    // fallback ל-localStorage (מכשיר ראשי לפני הרצת SQL)
+    try {
+      const ls = JSON.parse(localStorage.getItem('vintrack_finance') || '{}');
+      ls[finMonth] = payload;
+      localStorage.setItem('vintrack_finance', JSON.stringify(ls));
+    } catch { /* noop */ }
+    const { error } = await window.sb.from('monthly_finance').upsert(payload, { onConflict: 'month' });
+    setFinBusy(false);
+    if (error) (window.toast?.info || alert)('נשמר במכשיר זה. ליצירת טבלת monthly_finance בסופאבייס (שיתוף בין מכשירים) הרץ את missing_tables.sql.');
+    else (window.toast?.success || alert)('✓ נתוני החודש נשמרו');
+    setTimeout(() => window.refreshData && window.refreshData('finance-save'), 400);
+  };
+
+  const monthLabel = (mk) => {
+    const [y, mo] = String(mk).split('-');
+    const names = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+    return (names[(+mo) - 1] || mk) + ' ' + y;
+  };
+
   const addPromoCat = async () => {
     const units = Number(pUnits) || 0, total = Number(pTotal) || 0;
     const name = pName.trim() || (units && total ? `${units} ב-${total}` : '');
@@ -305,6 +378,73 @@ const Settings = ({ activeBranch = 'both' }) => {
           <div className="muted" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
             כדי לשייך יין למבצע: כרטיסיית המוצר → קטע "🏷️ מבצע לקוחות" → בחר מבצע → שמור.
             <br />המחיר ליחידה והרווח האמיתי מחושבים אוטומטית ומופיעים במכירות ובניתוח.
+          </div>
+        </div>
+      </Card>
+
+      {/* הוצאות + הכנסות חוץ-קופה → רווח נטו */}
+      <Card title="💰 הוצאות חודשיות + הכנסות חוץ-קופה" sub="הזנה ידנית — מחושב רווח נטו (רווח גולמי + הכנסות חוץ-קופה − הוצאות)">
+        <div style={{ padding: 18 }}>
+          {/* בורר חודש */}
+          <div className="row" style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+            <label className="muted" style={{ fontSize: 13 }}>חודש:</label>
+            <select className="input" value={finMonth} onChange={(e) => setFinMonth(e.target.value)}
+                    style={{ width: 180, padding: '6px 10px', fontWeight: 600 }}>
+              {finMonths.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+            </select>
+          </div>
+
+          {/* הוצאות */}
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: 'var(--danger)' }}>הוצאות (₪)</div>
+          <div className="cat-min-grid">
+            {FIN_EXP_FIELDS.map(f => (
+              <div key={f.k} className="cat-min-row">
+                <div style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 13 }}>{f.label}</div>
+                <input className="input" type="number" min="0" step="1"
+                       value={finVals[f.k] ?? ''} placeholder="0"
+                       onChange={(e) => setFinVals(v => ({ ...v, [f.k]: e.target.value }))}
+                       style={{ width: 110, textAlign: 'center', fontWeight: 700, padding: '6px 8px' }} />
+              </div>
+            ))}
+          </div>
+
+          {/* הכנסות חוץ-קופה */}
+          <div style={{ fontWeight: 700, fontSize: 13, margin: '16px 0 8px', color: 'var(--accent-strong)' }}>הכנסות חוץ-קופה (₪)</div>
+          <div className="cat-min-grid">
+            {FIN_INC_FIELDS.map(f => (
+              <div key={f.k} className="cat-min-row">
+                <div style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 13 }}>{f.label}</div>
+                <input className="input" type="number" min="0" step="1"
+                       value={finVals[f.k] ?? ''} placeholder="0"
+                       onChange={(e) => setFinVals(v => ({ ...v, [f.k]: e.target.value }))}
+                       style={{ width: 110, textAlign: 'center', fontWeight: 700, padding: '6px 8px' }} />
+              </div>
+            ))}
+          </div>
+
+          {/* תצוגה מקדימה — רווח נטו */}
+          <div style={{ marginTop: 16, padding: 14, background: 'var(--surface-2, rgba(0,0,0,0.03))', borderRadius: 10,
+                        display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div><div className="muted" style={{ fontSize: 11 }}>רווח גולמי</div>
+              <div style={{ fontWeight: 700 }}>{finPreview.hasMonth ? '₪' + Math.round(finPreview.gross).toLocaleString('he-IL') : '—'}</div></div>
+            <div><div className="muted" style={{ fontSize: 11 }}>+ הכנסות חוץ-קופה</div>
+              <div style={{ fontWeight: 700, color: 'var(--accent-strong)' }}>₪{Math.round(finPreview.inc).toLocaleString('he-IL')}</div></div>
+            <div><div className="muted" style={{ fontSize: 11 }}>− הוצאות</div>
+              <div style={{ fontWeight: 700, color: 'var(--danger)' }}>₪{Math.round(finPreview.exp).toLocaleString('he-IL')}</div></div>
+            <div><div className="muted" style={{ fontSize: 11 }}>= רווח נטו</div>
+              <div style={{ fontWeight: 800, fontSize: 18, color: finPreview.net >= 0 ? 'var(--success, #0a7a55)' : 'var(--danger)' }}>₪{Math.round(finPreview.net).toLocaleString('he-IL')}</div></div>
+            <div><div className="muted" style={{ fontSize: 11 }}>רווח נטו %</div>
+              <div style={{ fontWeight: 800, fontSize: 18, color: finPreview.net >= 0 ? 'var(--success, #0a7a55)' : 'var(--danger)' }}>{finPreview.hasMonth ? finPreview.margin.toFixed(1) + '%' : '—'}</div></div>
+          </div>
+
+          <div className="row" style={{ gap: 12, marginTop: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button className="btn btn-primary" onClick={saveFinance} disabled={finBusy}>
+              {finBusy ? 'שומר…' : 'שמור נתוני חודש'}
+            </button>
+            <span className="muted" style={{ fontSize: 12 }}>רווח גולמי ומחזור נמשכים אוטומטית מהסיכום החודשי.</span>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
+            💡 שעות עובדים — ייובאו בעתיד אוטומטית מ-CashOnTab (דורש לימוד דוח השעות). כרגע הזן סך שכר ידני.
           </div>
         </div>
       </Card>
