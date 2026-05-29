@@ -1,5 +1,5 @@
 // === Dashboard — wine store with 2 branches ===
-const TARGETS = { revenue: 416667, margin: 25 };
+const TARGETS = { revenue: 416667, get margin() { return (window.SETTINGS && Number(window.SETTINGS.profitTarget)) || 25; } };
 const VAT = 1.18;  // כל המחזורים מוצגים כולל מע"מ — כמו ב-CashOnTab
 
 const fmtCurrency = (v) => `₪${v.toLocaleString('he-IL', { maximumFractionDigits: 0 })}`;
@@ -318,7 +318,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                   </div>
                   <div style={{ textAlign: 'end' }}>
                     <div className="muted" style={{ fontSize: 11 }}>מרווח</div>
-                    <div style={{ fontWeight: 700 }}><span className={`badge ${dailyRaw.margin >= 25 ? 'ok' : 'warn'}`}>{Number(dailyRaw.margin || 0).toFixed(1)}%</span></div>
+                    <div style={{ fontWeight: 700 }}><span className={`badge ${dailyRaw.margin >= TARGETS.margin ? 'ok' : 'warn'}`}>{Number(dailyRaw.margin || 0).toFixed(1)}%</span></div>
                   </div>
                 </div>
               </>
@@ -385,7 +385,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
               </div>
               <div style={{ textAlign: 'end' }}>
                 <div className="muted" style={{ fontSize: 11 }}>מרווח</div>
-                <div style={{ fontWeight: 700 }}><span className={`badge ${monthRaw.margin >= 25 ? 'ok' : 'warn'}`}>{Number(monthRaw.margin || 0).toFixed(1)}%</span></div>
+                <div style={{ fontWeight: 700 }}><span className={`badge ${monthRaw.margin >= TARGETS.margin ? 'ok' : 'warn'}`}>{Number(monthRaw.margin || 0).toFixed(1)}%</span></div>
               </div>
             </div>
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-3)', textAlign: 'center' }}>
@@ -469,7 +469,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         <Card
           title="מגמת רווח גולמי %"
           sub="6 חודשים אחרונים"
-          action={<span className="badge accent">יעד: 25%</span>}
+          action={<span className="badge accent">יעד: {TARGETS.margin}%</span>}
         >
           <div style={{ padding: 16 }}>
             <LineChart data={marginTrend} fmt={(v) => v.toFixed(1) + '%'} color="var(--ok)" />

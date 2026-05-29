@@ -1676,6 +1676,10 @@ button:focus-visible, .input:focus-visible, .select:focus-visible {
 [data-theme="dark"] .topstat-accent .topstat-value { color: oklch(0.85 0.06 220); }
 .topstat-ok .topstat-value { color: var(--ok); }
 
+/* Settings — מינ׳ מלאי לפי קטגוריה */
+.cat-min-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.cat-min-row { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+
 .nav-tab {
   display: flex;
   align-items: center;

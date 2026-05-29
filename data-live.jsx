@@ -24,6 +24,7 @@ Object.assign(window, {
   PAST_ORDERS: {}, LAST_RECEIVED: {},
   APPROVED_PRODUCTS: new Set(),
   PROMO_CATEGORIES: [], PROMO_BY_BARCODE: {},
+  SETTINGS: { profitTarget: 25, defaultMin: 3, categoryMin: {} },
 });
 
 // Supabase PostgREST max_rows = 1000. טוענים בדפים עד שנגמר.
@@ -46,7 +47,7 @@ async function fetchAll(table, select = '*', opts = {}) {
 
 async function loadAllData() {
   const sb = window.sb;
-  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR] = await Promise.all([
+  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR] = await Promise.all([
     fetchAll('products'),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
@@ -58,6 +59,7 @@ async function loadAllData() {
     sb.from('product_approvals').select('barcode'),
     sb.from('promo_categories').select('*').order('price_total'),
     sb.from('product_promos').select('*'),
+    sb.from('settings').select('key,value'),   // הגדרות גלובליות (יעד רווח, מינ׳ לפי קטגוריה) — graceful אם הטבלה חסרה
   ]);
 
   // ─── מבצעי לקוחות (סוגי מבצעים + שיוך לכל מוצר) ───
@@ -210,11 +212,34 @@ async function loadAllData() {
   // אישורי מוצרים — Set של ברקודים שאושרו (טבלה נפרדת, לא מושפעת מ-DELETE+INSERT)
   const APPROVED_PRODUCTS = new Set((appR.data || []).map(r => r.barcode));
 
+  // ─── הגדרות גלובליות (settings: key→value jsonb) ───
+  // נטען מ-Supabase; אם הטבלה חסרה (setR.error) — fallback ל-localStorage כדי שהמכשיר הראשי עדיין יעבוד.
+  const SETTINGS = { profitTarget: 25, defaultMin: 3, categoryMin: {} };
+  const setRows = (setR && setR.data) ? setR.data : [];
+  if (setRows.length) {
+    setRows.forEach((r) => {
+      if (r.key === 'profit_target') SETTINGS.profitTarget = n(r.value) || 25;
+      else if (r.key === 'default_min') SETTINGS.defaultMin = n(r.value) || 3;
+      else if (r.key === 'category_min') {
+        let v = r.value;
+        try { if (typeof v === 'string') v = JSON.parse(v); } catch { v = {}; }
+        if (v && typeof v === 'object') SETTINGS.categoryMin = v;
+      }
+    });
+  } else {
+    try {
+      const ls = JSON.parse(localStorage.getItem('vintrack_settings') || '{}');
+      if (ls.profitTarget) SETTINGS.profitTarget = n(ls.profitTarget) || 25;
+      if (ls.defaultMin) SETTINGS.defaultMin = n(ls.defaultMin) || 3;
+      if (ls.categoryMin && typeof ls.categoryMin === 'object') SETTINGS.categoryMin = ls.categoryMin;
+    } catch { /* noop */ }
+  }
+
   Object.assign(window, {
     BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH, INVENTORY_VALUE_TOTAL,
     DAILY_DETAILS, APPROVED_PRODUCTS,
-    PROMO_CATEGORIES, PROMO_BY_BARCODE,
+    PROMO_CATEGORIES, PROMO_BY_BARCODE, SETTINGS,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
     LAST_REFRESH: Date.now(),
   });

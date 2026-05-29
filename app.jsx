@@ -59,7 +59,8 @@ function TopStatsBar({ activeBranch, onNav }) {
                : activeBranch === 'kohav'  ? (inv.kohav || 0)
                : (inv.value || 0);
 
-  const marginOK = (cur.margin || 0) >= 25;
+  const profitTarget = (window.SETTINGS && Number(window.SETTINGS.profitTarget)) || 25;
+  const marginOK = (cur.margin || 0) >= profitTarget;
 
   return (
     <div className="topstats">
@@ -77,7 +78,7 @@ function TopStatsBar({ activeBranch, onNav }) {
         <div className="topstat-label">רווח גולמי</div>
         <div className="topstat-value">{fmt(monthProfit)}</div>
         <div className="topstat-sub" style={{ color: marginOK ? 'var(--ok)' : 'var(--warn)' }}>
-          מרווח {Number(cur.margin || 0).toFixed(1)}% {marginOK ? '✓' : '· יעד 25%'}
+          מרווח {Number(cur.margin || 0).toFixed(1)}% {marginOK ? '✓' : '· יעד ' + profitTarget + '%'}
         </div>
       </button>
       <button className="topstat topstat-accent" onClick={() => onNav('inventory')} title="ערך המלאי בחנות לפי עלות">

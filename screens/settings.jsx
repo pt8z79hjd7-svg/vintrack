@@ -5,6 +5,14 @@ const Settings = ({ activeBranch = 'both' }) => {
   const [busy, setBusy] = useState(false);
   const [stats, setStats] = useState({ total: 0, withCustom: 0, defaultCount: 0 });
 
+  // ─── הגדרות גלובליות: יעד רווח + מינ׳ לפי קטגוריה ───
+  const S = window.SETTINGS || { profitTarget: 25, defaultMin: 3, categoryMin: {} };
+  const cats = (window.CATEGORIES || []).filter(c => c.id !== 'all');
+  const [profitTarget, setProfitTarget] = useState(S.profitTarget ?? 25);
+  const [catMins, setCatMins] = useState({});
+  const [savingPT, setSavingPT] = useState(false);
+  const [savingCat, setSavingCat] = useState(false);
+
   // טען סטטיסטיקה של מינימום נוכחי
   React.useEffect(() => {
     const P = window.PRODUCTS || [];
@@ -40,6 +48,65 @@ const Settings = ({ activeBranch = 'both' }) => {
       return stock > 0 && stock < (p.min_stock ?? 3);
     }).length;
   }, [activeBranch]);
+
+  // אכלוס ראשוני של שדות הקטגוריה + יעד הרווח מתוך SETTINGS
+  React.useEffect(() => {
+    const SS = window.SETTINGS || {};
+    const cm = SS.categoryMin || {};
+    const init = {};
+    (window.CATEGORIES || []).filter(c => c.id !== 'all').forEach(c => {
+      const v = cm[c.label] ?? cm[c.id];
+      init[c.label] = (v != null ? v : '');
+    });
+    setCatMins(init);
+    setProfitTarget(SS.profitTarget ?? 25);
+  }, [window.LAST_REFRESH]);
+
+  // שמירת הגדרה ב-Supabase (טבלת settings) + מראה ל-localStorage (fallback אם הטבלה חסרה)
+  const saveSetting = async (key, value) => {
+    try {
+      const ls = JSON.parse(localStorage.getItem('vintrack_settings') || '{}');
+      if (key === 'profit_target') ls.profitTarget = value;
+      else if (key === 'category_min') ls.categoryMin = value;
+      else if (key === 'default_min') ls.defaultMin = value;
+      localStorage.setItem('vintrack_settings', JSON.stringify(ls));
+    } catch { /* noop */ }
+    const { error } = await window.sb.from('settings').upsert({ key, value }, { onConflict: 'key' });
+    return error;
+  };
+
+  const saveProfitTarget = async () => {
+    const v = Math.max(1, Math.min(99, Number(profitTarget) || 25));
+    setSavingPT(true);
+    const err = await saveSetting('profit_target', v);
+    setSavingPT(false);
+    if (window.SETTINGS) window.SETTINGS.profitTarget = v;
+    if (err) (window.toast?.info || alert)('נשמר במכשיר זה. ליצירת טבלת settings בסופאבייס (שיתוף בין מכשירים) הרץ את missing_tables.sql.');
+    else (window.toast?.success || alert)('✓ יעד רווח נשמר');
+    setTimeout(() => window.refreshData && window.refreshData('settings-pt'), 400);
+  };
+
+  const saveCatMins = async () => {
+    const clean = {};
+    Object.entries(catMins).forEach(([label, v]) => { const nn = Number(v); if (label && nn > 0) clean[label] = nn; });
+    if (!Object.keys(clean).length) { (window.toast?.warn || alert)('הזן מינימום (>0) לפחות לקטגוריה אחת'); return; }
+    const lines = Object.entries(clean).map(([k, v]) => `${k} → ${v}`).join('\n');
+    if (!window.confirm(`לעדכן min_stock לפי קטגוריה?\n\n${lines}\n\nיוחל על כל המוצרים בקטגוריות אלו.`)) return;
+    setSavingCat(true);
+    try {
+      const err = await saveSetting('category_min', clean);
+      if (window.SETTINGS) window.SETTINGS.categoryMin = clean;
+      let applied = 0;
+      for (const [label, v] of Object.entries(clean)) {
+        const { error } = await window.sb.from('products').update({ min_stock: v }).eq('category', label);
+        if (!error) applied++;
+      }
+      (window.toast?.success || alert)(`✓ הוחל על ${applied} קטגוריות` + (err ? ' (הגדרות נשמרו מקומית)' : ''));
+      setTimeout(() => window.refreshData && window.refreshData('settings-catmin'), 600);
+    } catch (e) {
+      (window.toast?.error || alert)('שגיאה: ' + e.message);
+    } finally { setSavingCat(false); }
+  };
 
   // ─── מבצעי לקוחות ───
   const promoCats = window.PROMO_CATEGORIES || [];
@@ -127,6 +194,58 @@ const Settings = ({ activeBranch = 'both' }) => {
             ⚠ פעולה זו תדרוס את ה-min_stock של <b>כל המוצרים</b> ({stats.total.toLocaleString('he-IL')}).
             <br />
             כדי לקבוע מינימום למוצר ספציפי: כרטיסיית המוצר → ערוך → שדה "מינימום מלאי להתראה".
+          </div>
+        </div>
+      </Card>
+
+      {/* יעד רווח גולמי */}
+      <Card title="🎯 יעד רווח גולמי" sub="הסף לצביעת המרווח (ירוק/כתום) בכל המסכים — דשבורד, פס עליון, סיכומים">
+        <div style={{ padding: 18 }}>
+          <div className="row" style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="muted" style={{ fontSize: 13 }}>יעד מרווח גולמי (%):</label>
+            <input className="input" type="number" min="1" max="99" step="1" value={profitTarget}
+                   onChange={(e) => setProfitTarget(e.target.value)}
+                   style={{ width: 100, fontSize: 18, fontWeight: 700, textAlign: 'center', padding: '6px 10px' }} />
+            <button className="btn btn-primary" onClick={saveProfitTarget} disabled={savingPT}>
+              {savingPT ? 'שומר…' : 'שמור יעד'}
+            </button>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 12 }}>
+            ברירת מחדל 25%. משפיע על צביעת ה-KPI וסימון ✓/יעד בכל המסכים.
+          </div>
+        </div>
+      </Card>
+
+      {/* מלאי מינימום לפי קטגוריה */}
+      <Card title="📦 מלאי מינימום לפי קטגוריה" sub="סף הזמנה אוטומטי לכל מוצר בקטגוריה (וויסקי, יין…) — מאכלס את min_stock">
+        <div style={{ padding: 18 }}>
+          {cats.length ? (
+            <div className="cat-min-grid">
+              {cats.map(c => {
+                const cnt = (window.PRODUCTS || []).filter(p => p.catLabel === c.label).length;
+                return (
+                  <div key={c.id} className="cat-min-row">
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</div>
+                      <div className="muted" style={{ fontSize: 11 }}>{cnt} מוצרים</div>
+                    </div>
+                    <input className="input" type="number" min="0" step="1"
+                           value={catMins[c.label] ?? ''} placeholder={String(S.defaultMin ?? 3)}
+                           onChange={(e) => setCatMins(m => ({ ...m, [c.label]: e.target.value }))}
+                           style={{ width: 72, textAlign: 'center', fontWeight: 700, padding: '6px 8px' }} />
+                  </div>
+                );
+              })}
+            </div>
+          ) : <div className="muted" style={{ fontSize: 13 }}>אין קטגוריות עדיין — רענן נתונים.</div>}
+          <div className="row" style={{ gap: 12, marginTop: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button className="btn btn-primary" onClick={saveCatMins} disabled={savingCat}>
+              {savingCat ? 'מחיל…' : 'שמור והחל על המוצרים'}
+            </button>
+            <span className="muted" style={{ fontSize: 12 }}>קטגוריות ריקות — נשארות עם הסף הקודם.</span>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
+            הערך מוחל על <b>min_stock</b> של כל מוצר בקטגוריה. הצינור האוטומטי שומר ערכים אלו (כל ערך ≠ 3 = עריכה ידנית).
           </div>
         </div>
       </Card>
