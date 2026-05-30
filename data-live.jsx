@@ -24,7 +24,7 @@ Object.assign(window, {
   PAST_ORDERS: {}, LAST_RECEIVED: {},
   APPROVED_PRODUCTS: new Set(),
   PROMO_CATEGORIES: [], PROMO_BY_BARCODE: {},
-  SETTINGS: { profitTarget: 25, defaultMin: 3, categoryMin: {} },
+  SETTINGS: { profitTarget: 25, defaultMin: 3, categoryMin: {}, showInclVat: true },
   FINANCE: { byMonth: {}, current: { totalExpense: 0, totalIncome: 0, grossProfit: 0, revenue: 0, netProfit: 0, netMargin: 0 } },
 });
 
@@ -216,12 +216,13 @@ async function loadAllData() {
 
   // ─── הגדרות גלובליות (settings: key→value jsonb) ───
   // נטען מ-Supabase; אם הטבלה חסרה (setR.error) — fallback ל-localStorage כדי שהמכשיר הראשי עדיין יעבוד.
-  const SETTINGS = { profitTarget: 25, defaultMin: 3, categoryMin: {} };
+  const SETTINGS = { profitTarget: 25, defaultMin: 3, categoryMin: {}, showInclVat: true };
   const setRows = (setR && setR.data) ? setR.data : [];
   if (setRows.length) {
     setRows.forEach((r) => {
       if (r.key === 'profit_target') SETTINGS.profitTarget = n(r.value) || 25;
       else if (r.key === 'default_min') SETTINGS.defaultMin = n(r.value) || 3;
+      else if (r.key === 'show_incl_vat') SETTINGS.showInclVat = (r.value === true || r.value === 'true' || r.value === 1);
       else if (r.key === 'category_min') {
         let v = r.value;
         try { if (typeof v === 'string') v = JSON.parse(v); } catch { v = {}; }
@@ -234,6 +235,7 @@ async function loadAllData() {
       if (ls.profitTarget) SETTINGS.profitTarget = n(ls.profitTarget) || 25;
       if (ls.defaultMin) SETTINGS.defaultMin = n(ls.defaultMin) || 3;
       if (ls.categoryMin && typeof ls.categoryMin === 'object') SETTINGS.categoryMin = ls.categoryMin;
+      if (typeof ls.showInclVat === 'boolean') SETTINGS.showInclVat = ls.showInclVat;
     } catch { /* noop */ }
   }
 
@@ -277,6 +279,14 @@ async function loadAllData() {
 }
 
 window.loadAllData = loadAllData;
+
+// ─── עזרי תצוגת מע"מ — תלוי בהגדרה SETTINGS.showInclVat (ברירת מחדל: כולל, כמו בקופה) ───
+// ערכי מחזור מאוחסנים ב-Supabase ללא מע"מ. הכפלה ב-vatMult() נותנת את התצוגה הראשית.
+window.vatOn       = () => (window.SETTINGS?.showInclVat !== false);  // true = מציגים כולל מע"מ
+window.vatMult     = () => (window.vatOn() ? 1.18 : 1);              // מכפיל לערך הראשי
+window.vatMultOpp  = () => (window.vatOn() ? 1 : 1.18);             // מכפיל לשורה המשנית (הפוך)
+window.vatLabel    = () => (window.vatOn() ? 'כולל מע״מ' : 'ללא מע״מ');
+window.vatLabelOpp = () => (window.vatOn() ? 'ללא מע״מ' : 'כולל מע״מ');
 
 // ─── רענון אוטומטי: בכל חזרה לטאב + ברקע כל 90 שניות + Supabase realtime ───
 // כל אלה מעדכנים את window.PRODUCTS/MONTHLY/DAILY וכו'. הקומפוננטות

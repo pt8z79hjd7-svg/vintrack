@@ -12,6 +12,7 @@ const Settings = ({ activeBranch = 'both' }) => {
   const [catMins, setCatMins] = useState({});
   const [savingPT, setSavingPT] = useState(false);
   const [savingCat, setSavingCat] = useState(false);
+  const [showInclVat, setShowInclVat] = useState(S.showInclVat !== false);
 
   // טען סטטיסטיקה של מינימום נוכחי
   React.useEffect(() => {
@@ -60,6 +61,7 @@ const Settings = ({ activeBranch = 'both' }) => {
     });
     setCatMins(init);
     setProfitTarget(SS.profitTarget ?? 25);
+    setShowInclVat(SS.showInclVat !== false);
   }, [window.LAST_REFRESH]);
 
   // שמירת הגדרה ב-Supabase (טבלת settings) + מראה ל-localStorage (fallback אם הטבלה חסרה)
@@ -69,6 +71,7 @@ const Settings = ({ activeBranch = 'both' }) => {
       if (key === 'profit_target') ls.profitTarget = value;
       else if (key === 'category_min') ls.categoryMin = value;
       else if (key === 'default_min') ls.defaultMin = value;
+      else if (key === 'show_incl_vat') ls.showInclVat = value;
       localStorage.setItem('vintrack_settings', JSON.stringify(ls));
     } catch { /* noop */ }
     const { error } = await window.sb.from('settings').upsert({ key, value }, { onConflict: 'key' });
@@ -84,6 +87,17 @@ const Settings = ({ activeBranch = 'both' }) => {
     if (err) (window.toast?.info || alert)('נשמר במכשיר זה. ליצירת טבלת settings בסופאבייס (שיתוף בין מכשירים) הרץ את missing_tables.sql.');
     else (window.toast?.success || alert)('✓ יעד רווח נשמר');
     setTimeout(() => window.refreshData && window.refreshData('settings-pt'), 400);
+  };
+
+  // מתג תצוגת מע"מ — מיידי (ללא צורך בכפתור שמירה)
+  const toggleVat = async (val) => {
+    setShowInclVat(val);
+    if (window.SETTINGS) window.SETTINGS.showInclVat = val;
+    // עדכון מיידי של ה-UI בכל המסכים
+    window.dispatchEvent(new CustomEvent('vintrack:data-updated', { detail: { reason: 'vat-toggle', at: Date.now() } }));
+    const err = await saveSetting('show_incl_vat', val);
+    if (err) (window.toast?.info || alert)('נשמר במכשיר זה בלבד (טבלת settings חסרה בסופאבייס).');
+    else (window.toast?.success || alert)(val ? '✓ מציג כולל מע״מ' : '✓ מציג ללא מע״מ');
   };
 
   const saveCatMins = async () => {
@@ -285,6 +299,26 @@ const Settings = ({ activeBranch = 'both' }) => {
           </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 12 }}>
             ברירת מחדל 25%. משפיע על צביעת ה-KPI וסימון ✓/יעד בכל המסכים.
+          </div>
+        </div>
+      </Card>
+
+      {/* תצוגת מע״מ — מתג גלובלי לדשבורד וסיכומים */}
+      <Card title="👁 תצוגת מע״מ" sub="הצג את המחזורים כולל מע״מ (כמו בקופה) או ללא מע״מ (נטו) — משפיע על דשבורד וסיכומים">
+        <div style={{ padding: 18 }}>
+          <div className="row" style={{ gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="row" style={{ gap: 10, alignItems: 'center', cursor: 'pointer' }}>
+              <input type="checkbox" checked={showInclVat}
+                     onChange={(e) => toggleVat(e.target.checked)}
+                     style={{ width: 20, height: 20, cursor: 'pointer' }} />
+              <span style={{ fontWeight: 600, fontSize: 14 }}>
+                {showInclVat ? '✓ מציג כולל מע״מ (כמו בקופה)' : '○ מציג ללא מע״מ (נטו)'}
+              </span>
+            </label>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
+            ברירת מחדל: כולל מע״מ — מתאים להשוואה ישירה לסכומים שמוצגים ב-CashOnTab.<br />
+            ההגדרה נשמרת ב-Supabase ומשותפת בין כל המכשירים. שינוי מיידי — אין צורך לרענן.
           </div>
         </div>
       </Card>

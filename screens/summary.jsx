@@ -1,4 +1,9 @@
 // === Daily and Monthly summary screens (חיים מ-Supabase) ===
+// עזרי מע"מ — מחזירים ערך נוכחי לפי SETTINGS.showInclVat (נקראים בתוך render)
+const _vatM       = () => (window.vatMult     ? window.vatMult()     : 1.18);
+const _vatMOpp    = () => (window.vatMultOpp  ? window.vatMultOpp()  : 1);
+const _vatLbl     = () => (window.vatLabel    ? window.vatLabel()    : 'כולל מע״מ');
+const _vatLblOpp  = () => (window.vatLabelOpp ? window.vatLabelOpp() : 'ללא מע״מ');
 
 // === Daily — בחירת תאריך מביאה את נתוני אותו יום ===
 const Daily = ({ activeBranch = 'both', onOpen }) => {
@@ -102,11 +107,11 @@ const Daily = ({ activeBranch = 'both', onOpen }) => {
       <div className="kpi-grid">
         <div className="kpi">
           <div className="kpi-label"><span className="kpi-icon"><ICoin size={16} /></span>
-            {activeBranch === 'both' ? 'מחזור כולל' : (activeBranch === 'mikado' ? 'מחזור מיקדו' : 'מחזור כוכב')} (כולל מע״מ)
+            {activeBranch === 'both' ? 'מחזור כולל' : (activeBranch === 'mikado' ? 'מחזור מיקדו' : 'מחזור כוכב')} ({_vatLbl()})
           </div>
-          <div className="kpi-value">{fmtCurrency(Math.round(d.total * 1.18))}</div>
+          <div className="kpi-value">{fmtCurrency(Math.round(d.total * _vatM()))}</div>
           <div className="kpi-foot">
-            <span style={{ color: 'var(--ink-2)' }}>ללא מע״מ: ₪{d.total.toLocaleString('he-IL')}</span>
+            <span style={{ color: 'var(--ink-2)' }}>{_vatLblOpp()}: ₪{Math.round(d.total * _vatMOpp()).toLocaleString('he-IL')}</span>
             <span className="muted"> · {d.salesLines} שורות</span>
           </div>
         </div>
@@ -116,7 +121,7 @@ const Daily = ({ activeBranch = 'both', onOpen }) => {
               <span className="kpi-icon" style={{ background: 'color-mix(in oklch, ' + BRANCHES[0].color + ' 18%, transparent)', color: BRANCHES[0].color }}><IBox size={16} /></span>
               מיקדו
             </div>
-            <div className="kpi-value">{fmtCurrency(Math.round(raw.mikado * 1.18))}</div>
+            <div className="kpi-value">{fmtCurrency(Math.round(raw.mikado * _vatM()))}</div>
             <div className="kpi-foot">{pct(raw.mikado)}% מהמחזור</div>
           </div>
         )}
@@ -126,7 +131,7 @@ const Daily = ({ activeBranch = 'both', onOpen }) => {
               <span className="kpi-icon" style={{ background: 'color-mix(in oklch, ' + BRANCHES[1].color + ' 18%, transparent)', color: BRANCHES[1].color }}><IBox size={16} /></span>
               כוכב הצפון
             </div>
-            <div className="kpi-value">{fmtCurrency(Math.round(raw.kohav * 1.18))}</div>
+            <div className="kpi-value">{fmtCurrency(Math.round(raw.kohav * _vatM()))}</div>
             <div className="kpi-foot">{pct(raw.kohav)}% מהמחזור</div>
           </div>
         )}
@@ -175,7 +180,7 @@ const DailyExpanded = ({ date, hasData }) => {
                   <th>#</th>
                   <th>מוצר</th>
                   <th style={{ textAlign: 'end' }}>כמות</th>
-                  <th style={{ textAlign: 'end' }}>הכנסה (כולל מע"מ)</th>
+                  <th style={{ textAlign: 'end' }}>הכנסה ({_vatLbl()})</th>
                   <th style={{ textAlign: 'end' }}>מבצע</th>
                 </tr>
               </thead>
@@ -516,7 +521,7 @@ const Monthly = ({ activeBranch = 'both' }) => {
         </div>
       </div>
 
-      <Card title={`מחזור חודשי${activeBranch === 'both' ? ' לפי סניף' : (activeBranch === 'mikado' ? ' — מיקדו בלבד' : ' — כוכב הצפון בלבד')}`} sub="כולל מע״מ · ₪"
+      <Card title={`מחזור חודשי${activeBranch === 'both' ? ' לפי סניף' : (activeBranch === 'mikado' ? ' — מיקדו בלבד' : ' — כוכב הצפון בלבד')}`} sub={`${_vatLbl()} · ₪`}
         action={
           <div className="row" style={{ gap: 14, fontSize: 12 }}>
             {(activeBranch === 'both' || activeBranch === 'mikado') && (
@@ -529,7 +534,7 @@ const Monthly = ({ activeBranch = 'both' }) => {
         }>
         <div style={{ padding: 16 }}>
           {data.length ? (
-            <GroupedBarChart data={data} keys={keys} colors={colors} fmt={(v) => fmtCompact(Math.round(v * 1.18))} height={260} />
+            <GroupedBarChart data={data} keys={keys} colors={colors} fmt={(v) => fmtCompact(Math.round(v * _vatM()))} height={260} />
           ) : <div style={{ padding: 30, textAlign: 'center', color: 'var(--ink-3)' }}>אין נתונים בטווח.</div>}
         </div>
       </Card>
@@ -557,14 +562,14 @@ const Monthly = ({ activeBranch = 'both' }) => {
                 return (
                   <tr key={m.m} style={m.current ? { background: 'var(--accent-soft)' } : {}}>
                     <td style={{ fontWeight: 700 }}>{m.m}{m.current && <Badge tone="accent" style={{ marginInlineStart: 6 }}>נוכחי</Badge>}</td>
-                    <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.total * 1.18).toLocaleString('he-IL')}</td>
-                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.mikado * 1.18).toLocaleString('he-IL')}</td>
-                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.kohav * 1.18).toLocaleString('he-IL')}</td>
+                    <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.total * _vatM()).toLocaleString('he-IL')}</td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.mikado * _vatM()).toLocaleString('he-IL')}</td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.kohav * _vatM()).toLocaleString('he-IL')}</td>
                     <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>₪{m.profit.toLocaleString('he-IL')}</td>
                     <td style={{ textAlign: 'end' }}><span className={`badge ${marginGood ? 'ok' : 'warn'}`}>{m.margin.toFixed(1)}%</span></td>
                     <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{m.days}</td>
                     <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', color: 'var(--ink-3)' }}>₪{m.extra.toLocaleString('he-IL')}</td>
-                    <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--accent-strong)' }}>₪{Math.round(total * 1.18).toLocaleString('he-IL')}</td>
+                    <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--accent-strong)' }}>₪{Math.round(total * _vatM()).toLocaleString('he-IL')}</td>
                   </tr>
                 );
               })}

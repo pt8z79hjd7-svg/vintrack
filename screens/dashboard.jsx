@@ -1,12 +1,17 @@
 // === Dashboard — wine store with 2 branches ===
 const TARGETS = { revenue: 416667, get margin() { return (window.SETTINGS && Number(window.SETTINGS.profitTarget)) || 25; } };
-const VAT = 1.18;  // כל המחזורים מוצגים כולל מע"מ — כמו ב-CashOnTab
+const VAT_DEFAULT = 1.18;  // fallback — בפועל משתמשים ב-window.vatMult() להחלפה דינמית
 
 const fmtCurrency = (v) => `₪${v.toLocaleString('he-IL', { maximumFractionDigits: 0 })}`;
 const fmtCompact = (v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : `${v}`;
 
 const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
   useLiveData();   // re-render אחרי refreshData (manual/interval/realtime)
+  // עזרי מע"מ — דינמיים, נקבעים לפי הגדרה (SETTINGS.showInclVat)
+  const VAT     = window.vatMult    ? window.vatMult()    : VAT_DEFAULT;   // מכפיל לתצוגה הראשית
+  const VAT_OPP = window.vatMultOpp ? window.vatMultOpp() : 1;             // שורה משנית (הפוך)
+  const VAT_LBL = window.vatLabel    ? window.vatLabel()    : 'כולל מע״מ';
+  const VAT_LBL_OPP = window.vatLabelOpp ? window.vatLabelOpp() : 'ללא מע״מ';
   const _cur = MONTHLY[MONTHLY.length - 1] || { total: 0, mikado: 0, kohav: 0, margin: 0 };
   const _prev = MONTHLY[MONTHLY.length - 2] || _cur;
   // לפי בורר הסניף: 'both' = total, 'mikado' / 'kohav' = רק אותו סניף
@@ -51,9 +56,23 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
   const datesSorted = Object.keys(byDate).sort();
   const latestDate = datesSorted[datesSorted.length - 1] || '';
   const todayISO = new Date().toISOString().slice(0, 10);
-  // היום אם קיים, אחרת האחרון הזמין
-  const dailyKey = byDate[todayISO] ? todayISO : latestDate;
-  const dailyRaw = byDate[dailyKey] || { date: '', total: 0, mikado: 0, kohav: 0, profit: 0, margin: 0, salesLines: 0 };
+  // עדיפות: היום ב-daily_summary → אם חסר, נסה לבנות synthetic מ-daily_details (טרי יותר)
+  // → אם גם זה ריק, fallback ל-latestDate (עם תווית "אתמול")
+  const ddToday = (window.DAILY_DETAILS || {})[todayISO];
+  const ddTodayIncl = ddToday ? Number(ddToday.total_revenue || 0) : 0;
+  let dailyKey, dailyRaw;
+  if (byDate[todayISO]) {
+    dailyKey = todayISO;
+    dailyRaw = byDate[todayISO];
+  } else if (ddTodayIncl > 0) {
+    // synthetic — daily_details כולל מע"מ, ממירים לערך EXCL כדי שיתאים לסכמת byDate
+    dailyKey = todayISO;
+    const exclT = Math.round(ddTodayIncl / 1.18);
+    dailyRaw = { date: todayISO, total: exclT, mikado: 0, kohav: 0, profit: 0, margin: 0, salesLines: Number(ddToday.receipts || 0) };
+  } else {
+    dailyKey = latestDate;
+    dailyRaw = byDate[latestDate] || { date: '', total: 0, mikado: 0, kohav: 0, profit: 0, margin: 0, salesLines: 0 };
+  }
   // נכון לעת ההורדה האחרונה (מתי הנתון של הסיכום היומי נכתב לאחרונה)
   const lastUpdate = window.LAST_REFRESH ? new Date(window.LAST_REFRESH) : new Date();
   const minsAgo = Math.round((Date.now() - lastUpdate.getTime()) / 60000);
@@ -62,8 +81,13 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                    : dailyRaw.total;
   const dailyProfit = activeBranch === 'both' ? dailyRaw.profit
                     : Math.round(dailyRaw.profit * (dailyRaw.total ? dailyTotal / dailyRaw.total : 0));
-  const dailyHasData = !!byDate[dailyKey];
+  const dailyHasData = !!byDate[dailyKey] || (dailyKey === todayISO && ddTodayIncl > 0);
   const dailyIsToday = dailyKey === todayISO;
+  // תווית הסבר כשהדשבורד מציג אתמול במקום היום (קובץ קופה של היום עדיין ריק)
+  const _fmtDate = (s) => s ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : '';
+  const dailyDateNotice = !dailyIsToday && dailyKey
+    ? `מציג ${_fmtDate(dailyKey)} (אתמול — קובץ קופה של היום עדיין ריק, יתעדכן עם סגירת יום)`
+    : null;
   // השוואת היום מול ממוצע 7 ימים אחרונים
   const last7 = datesSorted.slice(-8, -1).map(d => byDate[d]);
   const avg7 = last7.length ? last7.reduce((a, b) => {
@@ -115,7 +139,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         <button className={`kpi kpi-clickable ${revenueOK ? 'kpi-ok' : ''}`} onClick={() => onNav('monthly')}>
           <div className="kpi-label">
             <span className={`kpi-icon ${revenueOK ? 'ok' : ''}`}><ICoin size={16} /></span>
-            מחזור החודש <span className="muted" style={{fontSize:11}}>(כולל מע"מ)</span>
+            מחזור החודש <span className="muted" style={{fontSize:11}}>({VAT_LBL})</span>
           </div>
           <div className="kpi-value">{fmtCurrency(revenueInclVat)}</div>
           <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -206,12 +230,12 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
             borderRight: `3px solid ${onTrack ? 'var(--ok)' : 'var(--warn)'}`,
           }}>
             <div>
-              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>צפי סוף חודש (כולל מע״מ)</div>
+              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>צפי סוף חודש ({VAT_LBL})</div>
               <div style={{ fontSize: 24, fontWeight: 800, color: onTrack ? 'var(--ok)' : 'var(--warn)', fontVariantNumeric: 'tabular-nums' }}>
                 {fmtCurrency(projectedInclVat)}
               </div>
               <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                ללא מע״מ: {fmtCurrency(Math.round(projectedMonth))}
+                {VAT_LBL_OPP}: {fmtCurrency(Math.round(projectedMonth * VAT_OPP))}
               </div>
             </div>
             <div style={{ width: 1, height: 40, background: 'var(--line)' }} />
@@ -311,16 +335,22 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
           }
         >
           <div style={{ padding: 18 }}>
+            {dailyDateNotice && (
+              <div style={{ padding: '8px 12px', marginBottom: 12, background: '#fff8e1', border: '1px solid #f0c674',
+                            borderRadius: 'var(--r-md)', fontSize: 12.5, color: '#7a5b00', lineHeight: 1.4 }}>
+                ⚠ {dailyDateNotice}
+              </div>
+            )}
             {dailyHasData ? (
               <>
                 <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
                   <div>
-                    <div className="muted" style={{ fontSize: 11 }}>מחזור (כולל מע״מ)</div>
+                    <div className="muted" style={{ fontSize: 11 }}>מחזור ({VAT_LBL})</div>
                     <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
                       {fmtCurrency(Math.round(dailyTotal * VAT))}
                     </div>
                     <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                      ללא מע״מ: <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{fmtCurrency(dailyTotal)}</span>
+                      {VAT_LBL_OPP}: <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{fmtCurrency(Math.round(dailyTotal * VAT_OPP))}</span>
                     </div>
                   </div>
                   {avg7 > 0 && (
@@ -383,12 +413,12 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
           <div style={{ padding: 18 }}>
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
               <div>
-                <div className="muted" style={{ fontSize: 11 }}>מחזור עד עכשיו (כולל מע״מ)</div>
+                <div className="muted" style={{ fontSize: 11 }}>מחזור עד עכשיו ({VAT_LBL})</div>
                 <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
                   {fmtCurrency(Math.round(monthTotal * VAT))}
                 </div>
                 <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                  ללא מע״מ: <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{fmtCurrency(monthTotal)}</span>
+                  {VAT_LBL_OPP}: <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{fmtCurrency(Math.round(monthTotal * VAT_OPP))}</span>
                 </div>
               </div>
               <div style={{ textAlign: 'end' }}>
@@ -397,7 +427,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                   {fmtCurrency(Math.round(projectedMonth * VAT))}
                 </div>
                 <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                  ללא מע״מ: {fmtCurrency(Math.round(projectedMonth))}
+                  {VAT_LBL_OPP}: {fmtCurrency(Math.round(projectedMonth * VAT_OPP))}
                 </div>
               </div>
             </div>
@@ -442,7 +472,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14 }}>
         <Card
           title="מחזור חודשי · 6 חודשים אחרונים"
-          sub="מפוצל לפי סניף · כולל מע״מ"
+          sub={`מפוצל לפי סניף · ${VAT_LBL}`}
           action={
             <div className="row" style={{ gap: 14, fontSize: 12 }}>
               <span className="row" style={{ gap: 6 }}>
