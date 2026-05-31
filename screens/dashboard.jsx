@@ -12,8 +12,15 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
   const VAT_OPP = window.vatMultOpp ? window.vatMultOpp() : 1;             // שורה משנית (הפוך)
   const VAT_LBL = window.vatLabel    ? window.vatLabel()    : 'כולל מע״מ';
   const VAT_LBL_OPP = window.vatLabelOpp ? window.vatLabelOpp() : 'ללא מע״מ';
-  const _cur = MONTHLY[MONTHLY.length - 1] || { total: 0, mikado: 0, kohav: 0, margin: 0 };
-  const _prev = MONTHLY[MONTHLY.length - 2] || _cur;
+  // חודש נוכחי לפי תאריך (לא "האחרון במערך")
+  const _curMonthISO = new Date().toISOString().slice(0, 7);
+  const _curFound = MONTHLY.find(x => x.month === _curMonthISO);
+  const _curFallback = MONTHLY[MONTHLY.length - 1] || { total: 0, mikado: 0, kohav: 0, margin: 0, days: 0, month: _curMonthISO, m: '' };
+  const _cur = _curFound || _curFallback;
+  const _hasCurData = !!_curFound && _curFound.total > 0;
+  const _prev = MONTHLY.find(x => x.month !== _curMonthISO && MONTHLY.indexOf(x) === MONTHLY.length - (_curFound ? 2 : 1))
+             || MONTHLY[MONTHLY.length - (_curFound ? 2 : 1)]
+             || _cur;
   // לפי בורר הסניף: 'both' = total, 'mikado' / 'kohav' = רק אותו סניף
   const branchVal = (m) => activeBranch === 'both' ? m.total
                         : activeBranch === 'mikado' ? m.mikado
@@ -113,16 +120,38 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                    : monthRaw.total;
   const monthProfit = activeBranch === 'both' ? monthRaw.profit
                     : Math.round(monthRaw.profit * (monthRaw.total ? monthTotal / monthRaw.total : 0));
-  // ממוצע יומי בחודש (חלוקה לימים פעילים)
-  const daysActive = monthRaw.days || 1;
-  const avgPerDay = monthTotal / daysActive;
-  // צפי סוף חודש — ימים שנותרו × קצב יומי
+
+  // ─── צפי סוף חודש: ימי עבודה בפועל (לא קלנדריים) ───
   const now = new Date();
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const daysLeft = Math.max(0, daysInMonth - now.getDate());
-  const projectedMonth = monthTotal + avgPerDay * daysLeft;
-  const avgProfitPerDay = monthProfit / daysActive;
-  const projectedProfit = monthProfit + avgProfitPerDay * daysLeft;
+  // ימי עבודה משוערים: ממוצע ימי פעילות מ-6 חודשים אחרונים (מנטרל שבתות/חגים)
+  const _recentWithDays = MONTHLY.filter(m => m.days > 0 && m.month !== _curMonthISO).slice(-6);
+  const _avgWorkRatio = _recentWithDays.length > 0
+    ? _recentWithDays.reduce((s, m) => {
+        const dim = new Date(+m.month.slice(0,4), +m.month.slice(5,7), 0).getDate();
+        return s + (m.days / dim);
+      }, 0) / _recentWithDays.length
+    : 0.84;
+  const estWorkingDays = Math.round(daysInMonth * _avgWorkRatio);
+  const daysActive = monthRaw.days || 0;
+
+  let avgPerDay, projectedMonth, projectedProfit, workingDaysLeft;
+  if (_hasCurData && daysActive > 0) {
+    avgPerDay = monthTotal / daysActive;
+    workingDaysLeft = Math.max(0, estWorkingDays - daysActive);
+    projectedMonth = monthTotal + avgPerDay * workingDaysLeft;
+    const avgProfitPerDay = monthProfit / daysActive;
+    projectedProfit = monthProfit + avgProfitPerDay * workingDaysLeft;
+  } else {
+    // אין נתונים לחודש הנוכחי — צפי מממוצע חודשים אחרונים
+    const _recent = MONTHLY.filter(m => m.total > 0 && m.month !== _curMonthISO).slice(-3);
+    const _avgRev = _recent.length > 0 ? _recent.reduce((s, m) => s + branchVal(m), 0) / _recent.length : 0;
+    const _avgProf = _recent.length > 0 ? _recent.reduce((s, m) => s + m.profit, 0) / _recent.length : 0;
+    avgPerDay = estWorkingDays > 0 ? _avgRev / estWorkingDays : 0;
+    workingDaysLeft = estWorkingDays;
+    projectedMonth = _avgRev;
+    projectedProfit = _avgProf;
+  }
 
   return (
     <div className="page">
@@ -267,7 +296,10 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         const onTrack = projectedInclVat >= targetInclVat;
         const pctOfTarget = Math.min(120, (projectedInclVat / targetInclVat) * 100);
         const gap = targetInclVat - projectedInclVat;
-        const avgDailyNeeded = daysLeft > 0 ? Math.round(gap / daysLeft) : 0;
+        const avgDailyNeeded = workingDaysLeft > 0 ? Math.round(gap / workingDaysLeft) : 0;
+        const projLabel = _hasCurData
+          ? `${daysActive} ימי עבודה עד כה · ${workingDaysLeft} נותרו (מתוך ~${estWorkingDays})`
+          : `צפי לפי ממוצע 3 חודשים אחרונים (~${estWorkingDays} ימי עבודה)`;
         return (
           <div className="card" style={{
             padding: '16px 20px',
@@ -304,7 +336,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
               </div>
               <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
                 {pctOfTarget.toFixed(0)}% מהיעד ({fmtCurrency(targetInclVat)})
-                {!onTrack && daysLeft > 0 && ` · חסר ${fmtCurrency(Math.abs(gap))} (${fmtCurrency(avgDailyNeeded)}/יום)`}
+                {!onTrack && workingDaysLeft > 0 && ` · חסר ${fmtCurrency(Math.abs(gap))} (${fmtCurrency(avgDailyNeeded)}/יום עבודה)`}
               </div>
             </div>
             <div style={{ width: 1, height: 40, background: 'var(--line)' }} />
@@ -314,7 +346,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                 {fmtCurrency(projectedProfitInclVat)}
               </div>
               <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                {daysLeft} ימים נותרים · ממוצע {fmtCurrency(Math.round(avgPerDay * VAT))}/יום
+                {projLabel}
               </div>
             </div>
           </div>
@@ -547,7 +579,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
 
         <Card
           title={`סיכום חודשי · ${monthRaw.m || ''}`}
-          sub={`${daysActive} ימי פעילות · ממוצע ${fmtCurrency(Math.round(avgPerDay))}/יום`}
+          sub={`${daysActive || 0} ימי פעילות${_hasCurData ? ` · ממוצע ${fmtCurrency(Math.round(avgPerDay || 0))}/יום` : ' · ממתין לנתונים'}`}
           action={<button className="btn btn-sm btn-ghost" onClick={() => onNav('monthly')}>פירוט →</button>}
         >
           <div style={{ padding: 18 }}>
