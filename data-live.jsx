@@ -11,6 +11,15 @@ const HEB_MON = { '01':'ינו','02':'פבר','03':'מרץ','04':'אפר','05':'
 const mlabel = (m) => { const [y, mo] = String(m || '').split('-'); return `${HEB_MON[mo] || mo} ${y || ''}`.trim(); };
 const n = (x) => Number(x) || 0;
 
+// ─── זיהוי גודל אריזה לבירות מתוך שם המוצר ───
+const detectPackSize = (name) => {
+  const s = String(name || '');
+  if (s.includes('ארגז'))    return { units: 24, label: 'ארגז' };
+  if (s.includes('שישייה'))  return { units: 6,  label: 'שישייה' };
+  if (s.includes('רביעייה')) return { units: 4,  label: 'רביעייה' };
+  return { units: 1, label: 'בודד' };
+};
+
 // אתחול גלובלים ריקים — כדי שאף מסך לא יקרוס לפני שהנתונים נטענים
 Object.assign(window, {
   BRANCHES: [
@@ -110,6 +119,14 @@ async function loadAllData() {
     promo: PROMO_BY_BARCODE[String(p.barcode)] || null,   // מבצע לקוחות משויך
     created_at: p.created_at || '',
     updated_at: p.updated_at || '',
+    ...(() => {
+      const cat = CATMAP[p.category] || 'other';
+      if (cat === 'beer') {
+        const pack = detectPackSize(p.name);
+        return { units_per_pack: pack.units, pack_label: pack.label };
+      }
+      return { units_per_pack: 1, pack_label: '' };
+    })(),
   }));
 
   // קטגוריות (לפי הקיימות בפועל)
@@ -203,6 +220,7 @@ async function loadAllData() {
       promo_stats: typeof r.promo_stats === 'string' ? JSON.parse(r.promo_stats || '{}') : (r.promo_stats || {}),
       incoming_purchases: _jp(r.incoming_purchases),
       incoming_transfers: _jp(r.incoming_transfers),
+      cashier_stats: _jp(r.cashier_stats),
       total_revenue: n(r.total_revenue),
       receipts: n(r.receipts),
       avg_basket: n(r.avg_basket),

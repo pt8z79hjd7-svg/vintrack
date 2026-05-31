@@ -8,11 +8,12 @@ const NAV_ITEMS = [
   { id: 'sales',     label: 'מכירות',     Icon: ICoin },
 ];
 const NAV_SECONDARY = [
-  { id: 'daily',        label: 'סיכום יומי',  Icon: ICalendar },
-  { id: 'monthly',      label: 'סיכום חודשי', Icon: ITrend },
-  { id: 'new-products', label: 'מוצרים חדשים', Icon: IPlus },
-  { id: 'analysis',     label: 'ניתוח וחריגות', Icon: IPercent },
-  { id: 'settings',     label: 'הגדרות',      Icon: ISettings },
+  { id: 'daily',          label: 'סיכום יומי',    Icon: ICalendar },
+  { id: 'monthly',        label: 'סיכום חודשי',   Icon: ITrend },
+  { id: 'new-products',   label: 'מוצרים חדשים',  Icon: IPlus },
+  { id: 'analysis',       label: 'ניתוח וחריגות', Icon: IPercent },
+  { id: 'employee-sales', label: 'עובדים',         Icon: IUsers },
+  { id: 'settings',       label: 'הגדרות',         Icon: ISettings },
 ];
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -135,9 +136,10 @@ function App() {
     sales:     'מוצרים מובילים',
     daily:     'סיכום יומי',
     monthly:   'סיכום חודשי',
-    analysis:      'ניתוח וחריגות',
-    'new-products': 'מוצרים חדשים',
-    settings:      'הגדרות',
+    analysis:          'ניתוח וחריגות',
+    'new-products':    'מוצרים חדשים',
+    'employee-sales':  'מכירות עובדים',
+    settings:          'הגדרות',
   };
 
   // חישוב badges פעם אחת
@@ -270,8 +272,9 @@ function App() {
         {tab === 'monthly'   && <Monthly activeBranch={activeBranch} />}
         {tab === 'analysis'      && <Analysis activeBranch={activeBranch} onOpen={handleOpen} />}
         {tab === 'sales'         && <Sales activeBranch={activeBranch} onOpen={handleOpen} />}
-        {tab === 'new-products'  && <NewProducts onOpen={handleOpen} activeBranch={activeBranch} />}
-        {tab === 'settings'  && <Settings activeBranch={activeBranch} />}
+        {tab === 'new-products'   && <NewProducts onOpen={handleOpen} activeBranch={activeBranch} />}
+        {tab === 'employee-sales' && <EmployeeSales activeBranch={activeBranch} />}
+        {tab === 'settings'       && <Settings activeBranch={activeBranch} />}
       </main>
 
       {/* ─── Bottom nav (mobile only — secondary tabs) ─── */}

@@ -178,6 +178,11 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
                                 <ISplit size={10} /> מקביל
                               </span>
                             )}
+                            {p.cat === 'beer' && p.units_per_pack > 1 && (
+                              <span className="parallel-pill" title={`${p.units_per_pack} בקבוקים ליחידה`}>
+                                🍺 {p.pack_label}
+                              </span>
+                            )}
                           </div>
                           <div className="row-product-sku">{catLabel}</div>
                         </div>
@@ -200,7 +205,14 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
                       </td>
                     )}
                     <td style={{ textAlign: 'center', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                      {totalStock}
+                      {p.cat === 'beer' && p.units_per_pack > 1 ? (
+                        <span title={`${totalStock} ${p.pack_label}`}>
+                          {totalStock * p.units_per_pack}
+                          <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--ink-3)', display: 'block' }}>
+                            {totalStock} {p.pack_label}
+                          </span>
+                        </span>
+                      ) : totalStock}
                     </td>
                   </tr>
                 );
@@ -215,6 +227,28 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
             </tbody>
           </table>
         </div>
+
+        {/* סיכום בירות */}
+        {cat === 'beer' && (() => {
+          const beerItems = filtered.filter(p => p.cat === 'beer');
+          const totalBottles = beerItems.reduce((s, p) => s + branchStock(p) * p.units_per_pack, 0);
+          const byPack = {};
+          beerItems.forEach(p => {
+            if (p.units_per_pack > 1) {
+              const lbl = p.pack_label;
+              if (!byPack[lbl]) byPack[lbl] = 0;
+              byPack[lbl] += branchStock(p);
+            }
+          });
+          const packSummary = Object.entries(byPack).map(([lbl, cnt]) => `${cnt} ${lbl}`).join(' · ');
+          return (
+            <div style={{ padding: '10px 18px', borderTop: '1px solid var(--line)', fontSize: 12,
+                          background: 'var(--surface-2)', display: 'flex', gap: 16, alignItems: 'center' }}>
+              <span style={{ fontWeight: 700 }}>🍺 סה״כ: {totalBottles} בקבוקים</span>
+              {packSummary && <span style={{ color: 'var(--ink-3)' }}>{packSummary}</span>}
+            </div>
+          );
+        })()}
 
         {/* Pagination */}
         <div style={{
