@@ -673,7 +673,7 @@ const Monthly = ({ activeBranch = 'both' }) => {
       </Card>
 
       {/* ─── טבלת רווח והפסד (P&L) — מחזור מול רכש מול הוצאות ─── */}
-      <Card title="📊 רווח והפסד (P&L)" sub="מחזור − רכש סחורה − הוצאות = שורה תחתונה">
+      <Card title={`📊 רווח והפסד (P&L) · ${_vatLbl()}`} sub="מחזור − רכש סחורה − הוצאות = שורה תחתונה">
         <div className="table-wrap">
           <table className="tbl">
             <thead>
@@ -690,20 +690,22 @@ const Monthly = ({ activeBranch = 'both' }) => {
             </thead>
             <tbody>
               {[...sel].reverse().map((m) => {
+                const V = _vatM();
                 const finRow = (window.FINANCE?.byMonth || {})[m.month] || {};
                 const ext = (Number(finRow.wolt) || 0) + (Number(finRow.tenbis) || 0) + (Number(finRow.external_sales) || 0);
                 const expTotal = (finRow.totalExpense || 0);
-                const purch = m.purchases || 0;
-                const plNet = m.total + ext - purch - expTotal;
-                const plPct = m.total > 0 ? (plNet / m.total) * 100 : 0;
+                const revV = Math.round(m.total * V);
+                const purchV = Math.round((m.purchases || 0) * V);
+                const plNet = revV + ext - purchV - expTotal;
+                const plPct = revV > 0 ? (plNet / revV) * 100 : 0;
                 const plOK = plNet >= 0;
                 const numS = { textAlign: 'end', fontVariantNumeric: 'tabular-nums' };
                 return (
                   <tr key={`pl-${m.m}`} style={m.current ? { background: 'var(--accent-soft)' } : {}}>
                     <td style={{ fontWeight: 700 }}>{m.m}{m.current && <Badge tone="accent" style={{ marginInlineStart: 6 }}>נוכחי</Badge>}</td>
-                    <td style={{ ...numS, fontWeight: 700 }}>₪{Math.round(m.total).toLocaleString('he-IL')}</td>
-                    <td style={{ ...numS, color: purch > 0 ? 'var(--danger)' : 'var(--ink-3)' }}>
-                      {purch > 0 ? `₪${Math.round(purch).toLocaleString('he-IL')}` : '—'}
+                    <td style={{ ...numS, fontWeight: 700 }}>₪{revV.toLocaleString('he-IL')}</td>
+                    <td style={{ ...numS, color: purchV > 0 ? 'var(--danger)' : 'var(--ink-3)' }}>
+                      {purchV > 0 ? `₪${purchV.toLocaleString('he-IL')}` : '—'}
                     </td>
                     <td style={{ ...numS, fontWeight: 600, color: 'var(--ok)' }}>₪{Math.round(m.profit).toLocaleString('he-IL')}</td>
                     <td style={{ ...numS, color: ext > 0 ? 'var(--accent-strong)' : 'var(--ink-3)' }}>
@@ -725,7 +727,7 @@ const Monthly = ({ activeBranch = 'both' }) => {
           </table>
         </div>
         <div className="muted" style={{ fontSize: 11, padding: 14, lineHeight: 1.5 }}>
-          💡 <b>P&L נטו</b> = מחזור + הכנסות חוץ-קופה − רכש סחורה (ת.מ. רכש) − הוצאות (שכר/שכירות/חשמל...).
+          💡 <b>P&L נטו</b> = מחזור ({_vatLbl()}) + הכנסות חוץ-קופה − רכש סחורה ({_vatLbl()}) − הוצאות (שכר/שכירות/חשמל...).
           <br />שים לב: רכש גדול בחודש אחד עשוי להימכר לאורך מספר חודשים — זו תמונת תזרים, לא margin.
         </div>
       </Card>

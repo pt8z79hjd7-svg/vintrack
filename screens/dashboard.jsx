@@ -410,15 +410,17 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
       {/* ─── דוח רווח והפסד (P&L) — מחזור מול רכש מול הוצאות ─── */}
       {(() => {
         const F = (window.FINANCE && window.FINANCE.current) || {};
-        const rev = F.revenue || monthRaw.total || 0;
-        const purch = F.purchases || 0;
+        const revExcl = F.revenue || monthRaw.total || 0;
+        const purchExcl = F.purchases || 0;
+        const revV = Math.round(revExcl * VAT);
+        const purchV = Math.round(purchExcl * VAT);
         const inc = F.totalIncome || 0;
         const salCalc = F.salaries_calculated || 0;
         const exp = F.totalExpense || 0;
         const otherExp = exp - salCalc;
-        const plNet = rev + inc - purch - exp;
-        const plMargin = rev > 0 ? (plNet / rev) * 100 : 0;
-        const hasPurch = purch > 0;
+        const plNet = revV + inc - purchV - exp;
+        const plMargin = revV > 0 ? (plNet / revV) * 100 : 0;
+        const hasPurch = purchExcl > 0;
         const hasExp = exp > 0;
         const plOK = plNet >= 0;
         const lineS = { display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 13 };
@@ -428,7 +430,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
           <div className="card" style={{ padding: '16px 20px', borderRight: '3px solid var(--accent-strong)' }}>
             <div className="between" style={{ alignItems: 'flex-start', marginBottom: 14 }}>
               <div>
-                <div className="muted" style={{ fontSize: 11 }}>דוח רווח והפסד (P&L) · {monthRaw.m || ''}</div>
+                <div className="muted" style={{ fontSize: 11 }}>דוח רווח והפסד (P&L) · {monthRaw.m || ''} · {VAT_LBL}</div>
                 <div className="muted" style={{ fontSize: 10.5, marginTop: 2 }}>
                   מחזור בפועל מול עלות רכש סחורה + הוצאות תפעוליות
                 </div>
@@ -437,8 +439,8 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
             </div>
             <div style={{ maxWidth: 440 }}>
               <div style={lineS}>
-                <span>מחזור מכירות (ללא מע״מ)</span>
-                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(rev))}</span>
+                <span>מחזור מכירות ({VAT_LBL})</span>
+                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(revV)}</span>
               </div>
               {inc > 0 && (
                 <div style={lineS}>
@@ -448,9 +450,9 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
               )}
               <div style={sepS} />
               <div style={lineS}>
-                <span style={{ color: 'var(--danger)' }}>− רכש סחורה (ת.מ. רכש)</span>
+                <span style={{ color: 'var(--danger)' }}>− רכש סחורה ({VAT_LBL})</span>
                 <span style={{ fontWeight: 600, color: 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
-                  {hasPurch ? fmtCurrency(Math.round(purch)) : <span className="muted">—</span>}
+                  {hasPurch ? fmtCurrency(purchV) : <span className="muted">—</span>}
                 </span>
               </div>
               {salCalc > 0 && (
