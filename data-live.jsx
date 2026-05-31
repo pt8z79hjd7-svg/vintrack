@@ -94,40 +94,38 @@ async function loadAllData() {
     { id: 'kohav', name: 'כוכב הצפון', color: 'oklch(0.62 0.14 60)' },
   ];
 
-  const PRODUCTS = products.map((p) => ({
-    id: p.barcode || p.id,
-    sku: p.barcode || '',
-    name: p.name,
-    cat: CATMAP[p.category] || 'other',
-    catLabel: p.category || 'אחר',
-    supplier: p.supplier || 'לא ידוע',
-    cost: n(p.cost_price),
-    price: n(p.sell_price),
-    stock: { mikado: n(p.stock_mikado), kohav: n(p.stock_kochav) },
-    total: n(p.stock_mikado) + n(p.stock_kochav),
-    parallel: p.has_parallel ? {
-      sku: p.parallel_barcode || '', supplier: p.parallel_supplier || '',
-      cost: n(p.parallel_cost),
-      stock: { mikado: n(p.parallel_stock_mikado), kohav: n(p.parallel_stock_kochav) },
-    } : null,
-    extra: p.extra_barcodes || [],
-    weekly: n(p.weekly_velocity),
-    margin: n(p.profit_margin),
-    is_promo: !!p.is_promo,
-    min_stock: n(p.min_stock),
-    effective_sell_price: p.effective_sell_price != null ? n(p.effective_sell_price) : null,
-    promo: PROMO_BY_BARCODE[String(p.barcode)] || null,   // מבצע לקוחות משויך
-    created_at: p.created_at || '',
-    updated_at: p.updated_at || '',
-    ...(() => {
-      const cat = CATMAP[p.category] || 'other';
-      if (cat === 'beer') {
-        const pack = detectPackSize(p.name);
-        return { units_per_pack: pack.units, pack_label: pack.label };
-      }
-      return { units_per_pack: 1, pack_label: '' };
-    })(),
-  }));
+  const PRODUCTS = products.map((p) => {
+    const _cat = CATMAP[p.category] || 'other';
+    const _pack = _cat === 'beer' ? detectPackSize(p.name) : { units: 1, label: '' };
+    return {
+      id: p.barcode || p.id,
+      sku: p.barcode || '',
+      name: p.name,
+      cat: _cat,
+      catLabel: p.category || 'אחר',
+      supplier: p.supplier || 'לא ידוע',
+      cost: n(p.cost_price),
+      price: n(p.sell_price),
+      stock: { mikado: n(p.stock_mikado), kohav: n(p.stock_kochav) },
+      total: n(p.stock_mikado) + n(p.stock_kochav),
+      parallel: p.has_parallel ? {
+        sku: p.parallel_barcode || '', supplier: p.parallel_supplier || '',
+        cost: n(p.parallel_cost),
+        stock: { mikado: n(p.parallel_stock_mikado), kohav: n(p.parallel_stock_kochav) },
+      } : null,
+      extra: p.extra_barcodes || [],
+      weekly: n(p.weekly_velocity),
+      margin: n(p.profit_margin),
+      is_promo: !!p.is_promo,
+      min_stock: n(p.min_stock),
+      effective_sell_price: p.effective_sell_price != null ? n(p.effective_sell_price) : null,
+      promo: PROMO_BY_BARCODE[String(p.barcode)] || null,
+      created_at: p.created_at || '',
+      updated_at: p.updated_at || '',
+      units_per_pack: _pack.units,
+      pack_label: _pack.label,
+    };
+  });
 
   // קטגוריות (לפי הקיימות בפועל)
   const seenCat = {};
