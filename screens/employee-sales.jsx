@@ -31,19 +31,19 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
   const { employees, daysWithData } = useMemo(() => {
     const empMap = {};
     let daysCount = 0;
+    const branchHeb = activeBranch === 'mikado' ? 'מיקדו'
+                    : activeBranch === 'kohav'  ? 'כוכב הצפון' : null;
     Object.entries(window.DAILY_DETAILS || {}).forEach(([date, dayData]) => {
       if (date < cutoffISO) return;
       const stats = dayData.cashier_stats;
       if (!stats || !stats.length) return;
       daysCount++;
       stats.forEach((emp) => {
-        const branchHeb = activeBranch === 'mikado' ? 'מיקדו'
-                        : activeBranch === 'kohav'  ? 'כוכב הצפון' : null;
-        if (branchHeb && emp.branch !== branchHeb) return;
+        // איסוף ראשוני — אגרגציה לכל העובדים, ואז סינון בהמשך
         if (!empMap[emp.name]) {
           empMap[emp.name] = {
             name: emp.name,
-            branch: emp.branch || '',
+            branchSet: new Set(),
             total_receipts: 0,
             total_revenue: 0,
             total_profit: 0,
@@ -53,6 +53,7 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
           };
         }
         const e = empMap[emp.name];
+        if (emp.branch) e.branchSet.add(emp.branch);
         e.total_receipts += emp.total_receipts || 0;
         e.total_revenue  += emp.total_revenue  || 0;
         e.total_profit   += emp.total_profit   || 0;
@@ -66,7 +67,17 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
         });
       });
     });
-    const employees = Object.values(empMap).sort((a, b) => b.total_revenue - a.total_revenue);
+    // סינון לפי סניף — נכלל אם העובד עבד שם לפחות יום אחד
+    let employees = Object.values(empMap);
+    if (branchHeb) {
+      employees = employees.filter((e) => e.branchSet.has(branchHeb));
+    }
+    // המרת branchSet לתווית תצוגה
+    employees = employees.map((e) => ({
+      ...e,
+      branch: e.branchSet.size > 1 ? 'שני סניפים' : (Array.from(e.branchSet)[0] || ''),
+    }));
+    employees.sort((a, b) => b.total_revenue - a.total_revenue);
     return { employees, daysWithData: daysCount };
   }, [cutoffISO, activeBranch, window.LAST_REFRESH]);
 
@@ -109,7 +120,9 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
           <div className="page-title" style={{ fontSize: 22, marginTop: 4 }}>מכירות עובדים</div>
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
             {employees.length} עובדים · {daysWithData} ימי נתונים
-            {activeBranch !== 'both' && ` · ${activeBranch === 'mikado' ? 'מיקדו' : 'כוכב הצפון'}`}
+            {activeBranch !== 'both' && (
+              <span> · {activeBranch === 'mikado' ? 'מיקדו' : 'כוכב הצפון'} (עובדים שעבדו בסניף; סכומים מאוחדים לכל הסניפים)</span>
+            )}
           </div>
         </div>
         <div className="chips">
