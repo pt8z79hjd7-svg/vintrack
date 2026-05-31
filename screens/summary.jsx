@@ -165,7 +165,8 @@ const DailyExpanded = ({ date, hasData }) => {
 
   const { top_sellers = [], generic_05 = [], club_discounts = [], price_anomalies = [],
     new_products = [], promo_stats = {}, incoming_purchases = [], incoming_transfers = [],
-    purchase_count = 0, transfer_count = 0 } = det;
+    purchase_count = 0, transfer_count = 0,
+    returns = [], returns_count = 0, returns_net_total = 0 } = det;
   const promoEntries = Object.entries(promo_stats).filter(([, v]) => v > 0);
 
   return (
@@ -365,6 +366,64 @@ const DailyExpanded = ({ date, hasData }) => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </Card>
+      )}
+
+      {/* ↩️ חשבוניות זיכוי / החזרות */}
+      {returns.length > 0 && (
+        <Card title="↩️ חשבוניות זיכוי" sub={`${returns.length} חשבוניות · סכום נטו ₪${Math.round(returns_net_total).toLocaleString('he-IL')}`}>
+          <div style={{ padding: 0 }}>
+            {returns.map((ret, ri) => (
+              <div key={ri} style={{ borderBottom: ri < returns.length - 1 ? '1px solid var(--line)' : 'none', padding: '12px 18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ fontSize: 13 }}>
+                    <strong>👤 {ret.worker}</strong>
+                    <span style={{ color: 'var(--ink-3)', marginInlineStart: 8 }}>{ret.branch} · {ret.time}</span>
+                  </div>
+                  <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                                color: ret.net_total < 0 ? 'var(--danger)' : 'var(--ok)' }}>
+                    נטו: ₪{Math.round(ret.net_total).toLocaleString('he-IL')}
+                  </div>
+                </div>
+                <div className="table-wrap">
+                  <table className="tbl" style={{ fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 20 }}></th>
+                        <th>מוצר</th>
+                        <th className="mono-tiny">ברקוד</th>
+                        <th style={{ textAlign: 'end' }}>כמות</th>
+                        <th style={{ textAlign: 'end' }}>סה״כ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ret.items.map((it, ii) => {
+                        const isReturn = it.qty < 0;
+                        return (
+                          <tr key={ii}>
+                            <td>{isReturn ? '↩' : '+'}</td>
+                            <td style={{ fontWeight: isReturn ? 600 : 400 }}>{it.name}</td>
+                            <td className="mono-tiny" style={{ color: 'var(--ink-3)' }}>{it.barcode}</td>
+                            <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums',
+                                         color: isReturn ? 'var(--danger)' : 'inherit' }}>
+                              {it.qty > 0 ? '+' : ''}{it.qty}
+                            </td>
+                            <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums',
+                                         color: isReturn ? 'var(--danger)' : 'inherit', fontWeight: 600 }}>
+                              ₪{Math.round(it.total).toLocaleString('he-IL')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '10px 18px', borderTop: '1px solid var(--line)', fontSize: 12, color: 'var(--ink-3)' }}>
+            ℹ️ פריטים שהוחזרו (↩) חזרו אוטומטית למלאי במחזור הבא. פריטים שניתנו בהחלפה (+) ירדו מהמלאי.
           </div>
         </Card>
       )}
