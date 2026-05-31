@@ -79,8 +79,23 @@ const ProductDetailModal = ({ product, onClose }) => {
 
   const saveProduct = async () => {
     setSaving(true);
+    const parallelUpdate = parallel ? {
+      has_parallel: true,
+      parallel_barcode: parallel.sku || null,
+      parallel_supplier: parallel.supplier || null,
+      parallel_cost: parallel.cost || null,
+      parallel_unify_sales: parallel.unify || false,
+    } : {
+      has_parallel: false,
+      parallel_barcode: null,
+      parallel_supplier: null,
+      parallel_cost: null,
+      parallel_unify_sales: false,
+    };
     const { error } = await window.sb.from('products')
-      .update({ sell_price: price, cost_price: cost, supplier, min_stock: Math.max(0, Number(minStock) || 0) })
+      .update({ sell_price: price, cost_price: cost, supplier,
+                min_stock: Math.max(0, Number(minStock) || 0),
+                ...parallelUpdate })
       .eq('barcode', product.sku);
     setSaving(false);
     if (error) {
@@ -89,7 +104,6 @@ const ProductDetailModal = ({ product, onClose }) => {
     }
     setSaved(true); setEditing(false);
     (window.toast?.success || alert)('✓ נשמר. יעבור לצינור עד 5 דק׳');
-    // טריגר רענון מיידי כדי שהמספרים יתעדכנו (במקום להמתין לrealtime)
     setTimeout(() => window.refreshData && window.refreshData('post-save'), 500);
   };
 
@@ -99,9 +113,10 @@ const ProductDetailModal = ({ product, onClose }) => {
 
   const addParallel = () => setParallel({
     sku: '',
-    supplier: SUPPLIERS[0].id,
+    supplier: (SUPPLIERS[0] && SUPPLIERS[0].id) || '',
     cost: 0,
     stock: { mikado: 0, kohav: 0 },
+    unify: false,
   });
 
   const updPar = (k, v) => setParallel({ ...parallel, [k]: v });
@@ -367,6 +382,18 @@ const ProductDetailModal = ({ product, onClose }) => {
                     <input className="input" type="number" step="0.01"
                            value={parallel.cost}
                            onChange={(e) => updPar('cost', +e.target.value)} />
+                  </div>
+                  <div className="field" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: 2 }}>
+                    <label className="row" style={{ gap: 6, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      <input type="checkbox" checked={parallel.unify || false}
+                             onChange={(e) => updPar('unify', e.target.checked)} />
+                      <span className="muted">אחד מכירות</span>
+                    </label>
+                    {parallel.unify && (
+                      <div className="muted" style={{ fontSize: 10, marginTop: 3, color: 'var(--ok)' }}>
+                        ✓ מכירות שני הברקודים יסוכמו יחד
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

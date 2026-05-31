@@ -36,6 +36,7 @@ Object.assign(window, {
   SETTINGS: { profitTarget: 25, defaultMin: 3, categoryMin: {}, showInclVat: true },
   FINANCE: { byMonth: {}, current: { totalExpense: 0, totalIncome: 0, grossProfit: 0, revenue: 0, netProfit: 0, netMargin: 0 } },
   EMPLOYEES: [], EMPLOYEE_HOURS: {},
+  BARCODE_ALIAS: {},
 });
 
 // Supabase PostgREST max_rows = 1000. טוענים בדפים עד שנגמר.
@@ -115,6 +116,7 @@ async function loadAllData() {
         sku: p.parallel_barcode || '', supplier: p.parallel_supplier || '',
         cost: n(p.parallel_cost),
         stock: { mikado: n(p.parallel_stock_mikado), kohav: n(p.parallel_stock_kochav) },
+        unify: p.parallel_unify_sales || false,
       } : null,
       extra: p.extra_barcodes || [],
       weekly: n(p.weekly_velocity),
@@ -333,12 +335,33 @@ async function loadAllData() {
     }
   }
 
+  // ─── מיזוג ייבוא מקביל: ברקודים מאוחדים מסוכמים תחת המוצר הראשי ───
+  const _barcodeAlias = {};
+  const _byBarcode = {};
+  PRODUCTS.forEach((p) => { _byBarcode[p.sku] = p; });
+  PRODUCTS.forEach((p) => {
+    if (p.parallel && p.parallel.sku && p.parallel.unify) {
+      const parSku = p.parallel.sku;
+      _barcodeAlias[parSku] = p.sku;
+      const parProd = _byBarcode[parSku];
+      if (parProd) {
+        p.weekly = (p.weekly || 0) + (parProd.weekly || 0);
+        p.total = p.total + parProd.total;
+        p.stock.mikado += parProd.stock.mikado;
+        p.stock.kohav  += parProd.stock.kohav;
+      }
+    }
+  });
+  const _aliasSet = new Set(Object.keys(_barcodeAlias));
+  const PRODUCTS_FINAL = PRODUCTS.filter((p) => !_aliasSet.has(p.sku));
+
   Object.assign(window, {
-    BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
+    BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS: PRODUCTS_FINAL, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH, INVENTORY_VALUE_TOTAL,
     DAILY_DETAILS, APPROVED_PRODUCTS,
     PROMO_CATEGORIES, PROMO_BY_BARCODE, SETTINGS, FINANCE,
     EMPLOYEES, EMPLOYEE_HOURS,
+    BARCODE_ALIAS: _barcodeAlias,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
     LAST_REFRESH: Date.now(),
   });
