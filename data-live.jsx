@@ -35,6 +35,7 @@ Object.assign(window, {
   PROMO_CATEGORIES: [], PROMO_BY_BARCODE: {},
   SETTINGS: { profitTarget: 25, defaultMin: 3, categoryMin: {}, showInclVat: true },
   FINANCE: { byMonth: {}, current: { totalExpense: 0, totalIncome: 0, grossProfit: 0, revenue: 0, netProfit: 0, netMargin: 0 } },
+  EMPLOYEES: [], EMPLOYEE_HOURS: {},
 });
 
 // Supabase PostgREST max_rows = 1000. טוענים בדפים עד שנגמר.
@@ -57,7 +58,7 @@ async function fetchAll(table, select = '*', opts = {}) {
 
 async function loadAllData() {
   const sb = window.sb;
-  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR] = await Promise.all([
+  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR, empR, empHoursR] = await Promise.all([
     fetchAll('products'),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
@@ -71,6 +72,8 @@ async function loadAllData() {
     sb.from('product_promos').select('*'),
     sb.from('settings').select('key,value'),   // הגדרות גלובליות (יעד רווח, מינ׳ לפי קטגוריה) — graceful אם הטבלה חסרה
     sb.from('monthly_finance').select('*'),    // הוצאות + הכנסות חוץ-קופה — graceful אם הטבלה חסרה
+    sb.from('employees').select('*').eq('is_active', true).order('name'),  // עובדים פעילים — graceful אם הטבלה חסרה
+    sb.from('employee_hours').select('*'),     // שעות לפי חודש — graceful אם הטבלה חסרה
   ]);
 
   // ─── מבצעי לקוחות (סוגי מבצעים + שיוך לכל מוצר) ───
@@ -258,6 +261,13 @@ async function loadAllData() {
     } catch { /* noop */ }
   }
 
+  // ─── עובדים + שעות (employees + employee_hours) ───
+  const EMPLOYEES = (empR && empR.data) ? empR.data : [];
+  const EMPLOYEE_HOURS = {};
+  ((empHoursR && empHoursR.data) || []).forEach((h) => {
+    EMPLOYEE_HOURS[`${h.employee_id}__${h.month}`] = h;
+  });
+
   // ─── הוצאות + הכנסות חוץ-קופה לפי חודש (monthly_finance) — לחישוב רווח נטו ───
   // נטען מ-Supabase; אם הטבלה חסרה/ריקה — fallback ל-localStorage (מכשיר ראשי לפני SQL).
   const FIN_EXP = ['salaries', 'rent', 'electricity', 'water', 'arnona', 'management', 'other_expense'];
@@ -287,17 +297,99 @@ async function loadAllData() {
   FINANCE.current.netMargin = FINANCE.current.revenue > 0
     ? (FINANCE.current.netProfit / FINANCE.current.revenue) * 100 : 0;
 
+  // ─── אם יש שעות עובדים לחודש הנוכחי — דרוס את salaries בעלות מעסיק האמיתית ───
+  if (EMPLOYEES.length && Object.keys(EMPLOYEE_HOURS).length) {
+    // חישוב מקומי כדי שלא נסמוך על window.totalPayrollForMonth שעדיין לא מוגדר
+    let _payTotal = 0, _payGross = 0, _payWith = 0;
+    EMPLOYEES.forEach((emp) => {
+      const h = EMPLOYEE_HOURS[`${emp.id}__${curMonth}`];
+      if (!h) return;
+      const reg = n(h.regular_hours), e125 = n(h.extra_hours_125), e150 = n(h.extra_hours_150);
+      if (reg + e125 + e150 === 0) return;
+      _payWith++;
+      const r = n(emp.hourly_rate);
+      const gross = reg * r + e125 * r * 1.25 + e150 * r * 1.5;
+      const pension   = gross * n(emp.pension_pct) / 100;
+      const severance = gross * n(emp.severance_pct) / 100;
+      const fund      = emp.include_fund ? gross * n(emp.fund_pct) / 100 : 0;
+      // ביטוח לאומי מעסיק (מדורג)
+      let bituach = 0;
+      const LO = 7522, HI = 46620;
+      if (gross <= LO) bituach = gross * 0.0355;
+      else if (gross <= HI) bituach = LO * 0.0355 + (gross - LO) * 0.076;
+      else bituach = LO * 0.0355 + (HI - LO) * 0.076;
+      _payGross += gross;
+      _payTotal += gross + pension + severance + fund + bituach;
+    });
+    if (_payWith > 0) {
+      FINANCE.current.salaries_calculated = Math.round(_payTotal);
+      FINANCE.current.salaries_gross = Math.round(_payGross);
+      FINANCE.current.payroll_employees = _payWith;
+      // החלף את הסכום הידני בעלות מעסיק המחושבת
+      FINANCE.current.totalExpense = FINANCE.current.totalExpense - FINANCE.current.salaries + _payTotal;
+      FINANCE.current.netProfit = FINANCE.current.grossProfit + FINANCE.current.totalIncome - FINANCE.current.totalExpense;
+      FINANCE.current.netMargin = FINANCE.current.revenue > 0
+        ? (FINANCE.current.netProfit / FINANCE.current.revenue) * 100 : 0;
+    }
+  }
+
   Object.assign(window, {
     BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH, INVENTORY_VALUE_TOTAL,
     DAILY_DETAILS, APPROVED_PRODUCTS,
     PROMO_CATEGORIES, PROMO_BY_BARCODE, SETTINGS, FINANCE,
+    EMPLOYEES, EMPLOYEE_HOURS,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
     LAST_REFRESH: Date.now(),
   });
 }
 
 window.loadAllData = loadAllData;
+
+// ─── חישובי שכר — ביטוח לאומי מעסיק לפי מדרגות 2026 ───
+// מדרגות: 3.55% עד ₪7,522 · 7.60% מ-₪7,522 עד ₪46,620 (תקרה לחודש)
+window.calcBituachLeumi = function (gross) {
+  const LO = 7522, HI = 46620;
+  if (gross <= 0) return 0;
+  if (gross <= LO) return gross * 0.0355;
+  if (gross <= HI) return LO * 0.0355 + (gross - LO) * 0.076;
+  return LO * 0.0355 + (HI - LO) * 0.076;
+};
+
+// חישוב שכר מלא לעובד יחיד — ברוטו + הפרשות מעסיק
+window.calcPayroll = function (emp, hours) {
+  const r = Number(emp.hourly_rate) || 0;
+  const reg  = Number(hours.regular_hours)    || 0;
+  const e125 = Number(hours.extra_hours_125)  || 0;
+  const e150 = Number(hours.extra_hours_150)  || 0;
+  const gross = reg * r + e125 * r * 1.25 + e150 * r * 1.5;
+  const pension   = gross * (Number(emp.pension_pct)   || 0) / 100;
+  const severance = gross * (Number(emp.severance_pct) || 0) / 100;
+  const fund      = emp.include_fund ? gross * (Number(emp.fund_pct) || 0) / 100 : 0;
+  const bituach   = window.calcBituachLeumi(gross);
+  const additions = pension + severance + fund + bituach;
+  return { gross, pension, severance, fund, bituach, additions, total: gross + additions };
+};
+
+// סיכום שכר לכל החודש (לחישוב KPI/דשבורד)
+window.totalPayrollForMonth = function (month) {
+  let gross = 0, total = 0, withHours = 0;
+  const emps = window.EMPLOYEES || [];
+  const hrs = window.EMPLOYEE_HOURS || {};
+  emps.forEach((emp) => {
+    const h = hrs[`${emp.id}__${month}`];
+    if (!h) return;
+    const reg = Number(h.regular_hours) || 0;
+    const e125 = Number(h.extra_hours_125) || 0;
+    const e150 = Number(h.extra_hours_150) || 0;
+    if (reg + e125 + e150 === 0) return;
+    withHours++;
+    const p = window.calcPayroll(emp, h);
+    gross += p.gross;
+    total += p.total;
+  });
+  return { gross: Math.round(gross), total: Math.round(total), count: emps.length, withHours };
+};
 
 // ─── עזרי תצוגת מע"מ — תלוי בהגדרה SETTINGS.showInclVat (ברירת מחדל: כולל, כמו בקופה) ───
 // ערכי מחזור מאוחסנים ב-Supabase ללא מע"מ. הכפלה ב-vatMult() נותנת את התצוגה הראשית.

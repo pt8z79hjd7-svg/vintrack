@@ -21,10 +21,20 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
   const current = { ..._cur, total: branchVal(_cur) };
   const prev = { ..._prev, total: branchVal(_prev) };
 
-  const revenueInclVat = Math.round(current.total * VAT);
+  // הכנסות חוץ-קופה (וולט/תן-ביס/אחר) — לתצוגה במחזור הראשי בלבד כש-activeBranch='both'
+  const externalIncome = (activeBranch === 'both' && window.FINANCE?.current?.totalIncome) || 0;
+  const revenueWithExternal = current.total + externalIncome;
+  const revenueInclVat = Math.round(revenueWithExternal * VAT);
+  const revenueStoreOnlyInclVat = Math.round(current.total * VAT);
+  const externalInclVat = Math.round(externalIncome * VAT);
   const targetInclVat = Math.round(TARGETS.revenue * VAT * (activeBranch === 'both' ? 1 : 0.5));
   const revenueOK = revenueInclVat >= targetInclVat;
   const marginOK = current.margin >= TARGETS.margin;
+
+  // שכר חודש נוכחי
+  const curMonthKey = new Date().toISOString().slice(0, 7);
+  const payroll = (window.totalPayrollForMonth ? window.totalPayrollForMonth(curMonthKey)
+                  : { gross: 0, total: 0, withHours: 0, count: 0 });
 
   const openOrders = ORDERS.filter(o => o.status !== 'completed').length;
   const pendingTransfers = TRANSFERS.filter(t => t.status === 'pending').length;
@@ -142,6 +152,11 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
             מחזור החודש <span className="muted" style={{fontSize:11}}>({VAT_LBL})</span>
           </div>
           <div className="kpi-value">{fmtCurrency(revenueInclVat)}</div>
+          {externalIncome > 0 && (
+            <div className="muted" style={{ fontSize: 10.5, marginTop: -4, marginBottom: 4 }}>
+              חנות: {fmtCurrency(revenueStoreOnlyInclVat)} + חוץ-קופה: {fmtCurrency(externalInclVat)}
+            </div>
+          )}
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <span className={`kpi-delta ${revDelta < 0 ? 'neg' : ''}`}>
               {revDelta >= 0 ? <IArrowUp size={12} /> : <IArrowDown size={12} />}
@@ -212,6 +227,39 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         </button>
       </div>
 
+      {/* ─── כרטיס שכר חודשי (רק אם הוזנו שעות) ─── */}
+      {payroll.withHours > 0 && (
+        <button onClick={() => onNav('employee-sales')} className="card"
+                style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr',
+                         alignItems: 'center', gap: 14, borderRight: '3px solid var(--accent-strong)',
+                         cursor: 'pointer', background: 'var(--surface)', border: 0, textAlign: 'right',
+                         font: 'inherit', width: '100%' }}>
+          <div>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>שכר עובדים — חודש נוכחי</div>
+            <div style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+              {fmtCurrency(payroll.gross)}
+            </div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>סה״כ ברוטו לעובדים</div>
+          </div>
+          <div style={{ width: 1, height: 40, background: 'var(--line)' }} />
+          <div>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>עלות מעסיק כוללת</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
+              {fmtCurrency(payroll.total)}
+            </div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>כולל הפרשות (פנסיה/פיצויים/קרן/בט״ל)</div>
+          </div>
+          <div style={{ width: 1, height: 40, background: 'var(--line)' }} />
+          <div>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>עובדים עם שעות</div>
+            <div style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+              {payroll.withHours} <span className="muted" style={{ fontSize: 14, fontWeight: 500 }}>/ {payroll.count}</span>
+            </div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>לחץ לעדכון שעות →</div>
+          </div>
+        </button>
+      )}
+
       {/* ─── צפי סוף חודש ─── */}
       {(() => {
         const projectedInclVat = Math.round(projectedMonth * VAT);
@@ -279,6 +327,8 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         const gross = F.grossProfit || monthRaw.profit || 0;
         const inc = F.totalIncome || 0;
         const exp = F.totalExpense || 0;
+        const salariesCalc = F.salaries_calculated || 0;  // עלות מעסיק מחושבת
+        const otherExp = exp - salariesCalc;              // הוצאות אחרות (שכ"ד/חשמל/וכו')
         const net = gross + inc - exp;
         const rev = F.revenue || monthRaw.total || 0;
         const netMargin = rev > 0 ? (net / rev) * 100 : 0;
@@ -288,7 +338,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
           <div className="card" style={{ padding: '16px 20px', borderRight: `3px solid ${netOK ? 'var(--ok)' : 'var(--danger)'}` }}>
             <div className="between" style={{ alignItems: 'flex-start', marginBottom: 12 }}>
               <div>
-                <div className="muted" style={{ fontSize: 11 }}>רווח נטו · {monthRaw.m || ''} · כלל החנות</div>
+                <div className="muted" style={{ fontSize: 11 }}>רווח נטו אמיתי · {monthRaw.m || ''} · כלל החנות</div>
                 <div style={{ fontSize: 26, fontWeight: 800, color: netOK ? 'var(--ok)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
                   {fmtCurrency(Math.round(net))}
                 </div>
@@ -300,12 +350,21 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                 {hasFinance ? 'עדכן הוצאות →' : 'הזן הוצאות →'}
               </button>
             </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12.5, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12.5, alignItems: 'center' }}>
               <span className="muted">רווח גולמי <b style={{ color: 'var(--ink-1)' }}>{fmtCurrency(Math.round(gross))}</b></span>
               <span style={{ color: 'var(--ink-3)' }}>+</span>
               <span className="muted">הכנסות חוץ-קופה <b style={{ color: 'var(--accent-strong)' }}>{fmtCurrency(Math.round(inc))}</b></span>
               <span style={{ color: 'var(--ink-3)' }}>−</span>
-              <span className="muted">הוצאות <b style={{ color: 'var(--danger)' }}>{fmtCurrency(Math.round(exp))}</b></span>
+              <span className="muted">הוצאות <b style={{ color: 'var(--danger)' }}>{fmtCurrency(Math.round(otherExp))}</b></span>
+              {salariesCalc > 0 && (
+                <>
+                  <span style={{ color: 'var(--ink-3)' }}>−</span>
+                  <span className="muted">
+                    שכר ({F.payroll_employees || 0} עובדים)
+                    <b style={{ color: 'var(--danger)', marginInlineStart: 4 }}>{fmtCurrency(Math.round(salariesCalc))}</b>
+                  </span>
+                </>
+              )}
             </div>
             {!hasFinance && (
               <div className="muted" style={{ fontSize: 11, marginTop: 10, lineHeight: 1.5 }}>

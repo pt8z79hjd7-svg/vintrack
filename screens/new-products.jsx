@@ -11,6 +11,7 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
   const [editCost, setEditCost] = useState('');
   const [editPrice, setEditPrice] = useState('');
   const [busy, setBusy] = useState(null);          // barcode currently saving
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const approved = window.APPROVED_PRODUCTS || new Set();
   const now = Date.now();
@@ -48,6 +49,8 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
   });
 
   const pending = classified.filter(p => !p.isApproved);
+  // מוצרים שיש להם מחיר+עלות אבל לא אושרו עדיין → מועמדים לאישור בכמות
+  const readyToApprove = classified.filter(p => !p.isApproved && !p.missingCost && !p.missingPrice);
   const countAll = pending.filter(p => p.needsAttention).length;
   const countMissingCost = pending.filter(p => p.missingCost).length;
   const countMissingPrice = pending.filter(p => p.missingPrice).length;
@@ -95,6 +98,38 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
       (window.toast?.error || alert)('שגיאה: ' + err.message);
     } finally {
       setBusy(null);
+    }
+  };
+
+  // אישור כל המוצרים שיש להם מחיר+עלות (bulk) — קיצור דרך אחרי update_from_count
+  const handleApproveAll = async () => {
+    if (!readyToApprove.length) return;
+    if (!window.confirm(`לאשר ${readyToApprove.length} מוצרים שיש להם גם מחיר וגם עלות?\n\nהם יעזבו את מסך "מוצרים חדשים" ויסומנו פעילים.`)) return;
+    setBulkBusy(true);
+    let ok = 0, failed = 0;
+    const CHUNK = 50;
+    try {
+      // 1. upsert לbatches של 50 ל-product_approvals
+      const nowIso = new Date().toISOString();
+      for (let i = 0; i < readyToApprove.length; i += CHUNK) {
+        const slice = readyToApprove.slice(i, i + CHUNK);
+        const recs = slice.map(p => ({ barcode: p.sku, approved_at: nowIso, approved_by: 'bulk' }));
+        const { error: e1 } = await window.sb.from('product_approvals').upsert(recs, { onConflict: 'barcode' });
+        if (e1) { failed += slice.length; console.warn('bulk approve:', e1.message); continue; }
+        // 2. עדכון is_active = true (אחד אחד כי PostgREST לא תומך ב-update לפי IN רחב)
+        for (const p of slice) {
+          const { error: e2 } = await window.sb.from('products').update({ is_active: true }).eq('barcode', p.sku);
+          if (e2) console.warn('is_active update failed for', p.sku, e2.message);
+          if (window.APPROVED_PRODUCTS) window.APPROVED_PRODUCTS.add(p.sku);
+          ok++;
+        }
+      }
+      (window.toast?.success || alert)(`✓ אושרו ${ok} מוצרים${failed ? ` (${failed} נכשלו)` : ''}`);
+      setTimeout(() => window.refreshData && window.refreshData('bulk-approve'), 400);
+    } catch (err) {
+      (window.toast?.error || alert)('שגיאה: ' + err.message);
+    } finally {
+      setBulkBusy(false);
     }
   };
 
@@ -148,8 +183,14 @@ const NewProducts = ({ onOpen, activeBranch = 'both' }) => {
         </div>
       </div>
 
-      {/* Filter chips */}
-      <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+      {/* Bulk approve button + Filter chips */}
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' }}>
+        {readyToApprove.length > 0 && (
+          <button className="btn btn-primary" onClick={handleApproveAll} disabled={bulkBusy}
+                  style={{ padding: '6px 14px', fontSize: 13 }}>
+            {bulkBusy ? '...מאשר' : `✓ אשר הכל (${readyToApprove.length})`}
+          </button>
+        )}
         {[
           ['all', `הכל (${countAll})`, ''],
           ['has_stock', `במלאי (${countHasStock})`, 'warn'],

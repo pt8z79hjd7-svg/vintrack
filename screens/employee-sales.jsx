@@ -12,12 +12,93 @@ const BUCKETS_CONFIG = [
 
 const EmployeeSales = ({ activeBranch = 'both' }) => {
   useLiveData();
+  const [subTab, setSubTab] = useState('sales');   // 'sales' | 'payroll'
   const [period, setPeriod] = useState('30');
   const [selectedEmp, setSelectedEmp] = useState(null);
+  const _curMonthKey = new Date().toISOString().slice(0, 7);
+  const [payrollMonth, setPayrollMonth] = useState(_curMonthKey);
+  const [hoursLocal, setHoursLocal] = useState({});   // key emp.id → {reg, e125, e150}
+  const [savingEmp, setSavingEmp] = useState(null);
 
   const fmt = (v) => `₪${Math.round(v || 0).toLocaleString('he-IL')}`;
   const te = { textAlign: 'end', fontVariantNumeric: 'tabular-nums' };
   const tc = { textAlign: 'center', fontVariantNumeric: 'tabular-nums' };
+
+  // ─── שכר: אכלוס מהזיכרון לפי חודש נבחר ───
+  React.useEffect(() => {
+    if (subTab !== 'payroll') return;
+    const init = {};
+    (window.EMPLOYEES || []).forEach((emp) => {
+      const h = (window.EMPLOYEE_HOURS || {})[`${emp.id}__${payrollMonth}`];
+      init[emp.id] = {
+        reg:  h?.regular_hours    ?? '',
+        e125: h?.extra_hours_125  ?? '',
+        e150: h?.extra_hours_150  ?? '',
+      };
+    });
+    setHoursLocal(init);
+  }, [subTab, payrollMonth, window.LAST_REFRESH]);
+
+  // רשימת חודשים לבחירה — חודש נוכחי + 17 אחרונים מ-MONTHLY
+  const payrollMonths = React.useMemo(() => {
+    const set = new Set([_curMonthKey]);
+    (window.MONTHLY || []).forEach(m => { if (m.month) set.add(m.month); });
+    return Array.from(set).sort().reverse().slice(0, 18);
+  }, [window.LAST_REFRESH]);
+
+  const monthLabel = (mk) => {
+    const [y, mo] = String(mk).split('-');
+    const names = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+    return (names[(+mo) - 1] || mk) + ' ' + y;
+  };
+
+  // ─── שמירת שעות עובד יחיד ─── + עדכון monthly_finance.salaries ───
+  const savePayrollRow = async (emp) => {
+    const local = hoursLocal[emp.id] || {};
+    const payload = {
+      employee_id: emp.id,
+      month: payrollMonth,
+      regular_hours:    Number(local.reg)  || 0,
+      extra_hours_125:  Number(local.e125) || 0,
+      extra_hours_150:  Number(local.e150) || 0,
+      updated_at: new Date().toISOString(),
+    };
+    setSavingEmp(emp.id);
+    try {
+      const { error } = await window.sb.from('employee_hours').upsert(payload, { onConflict: 'employee_id,month' });
+      if (error) throw error;
+      // עדכון מקומי כדי לא לחכות ל-refresh
+      const key = `${emp.id}__${payrollMonth}`;
+      if (!window.EMPLOYEE_HOURS) window.EMPLOYEE_HOURS = {};
+      window.EMPLOYEE_HOURS[key] = { ...payload };
+
+      // עדכון monthly_finance.salaries — סכום ברוטו של כל העובדים לחודש זה
+      let grossSum = 0;
+      (window.EMPLOYEES || []).forEach((e2) => {
+        const h2 = window.EMPLOYEE_HOURS[`${e2.id}__${payrollMonth}`];
+        if (!h2) return;
+        const p2 = window.calcPayroll(e2, h2);
+        grossSum += p2.total;  // עלות מעסיק כוללת
+      });
+      if (grossSum > 0) {
+        const finRow = (window.FINANCE?.byMonth || {})[payrollMonth];
+        const finPayload = { month: payrollMonth, salaries: Math.round(grossSum) };
+        // שמור גם את שאר השדות אם קיימים
+        if (finRow) {
+          ['rent','electricity','water','arnona','management','other_expense','wolt','tenbis','external_sales','notes'].forEach(k => {
+            if (finRow[k] != null) finPayload[k] = finRow[k];
+          });
+        }
+        await window.sb.from('monthly_finance').upsert(finPayload, { onConflict: 'month' });
+      }
+      (window.toast?.success || alert)(`✓ שעות ${emp.name} נשמרו`);
+      setTimeout(() => window.refreshData && window.refreshData('payroll-save'), 400);
+    } catch (e) {
+      (window.toast?.error || alert)('שגיאה: ' + e.message);
+    } finally {
+      setSavingEmp(null);
+    }
+  };
 
   const cutoffISO = useMemo(() => {
     const d = new Date();
@@ -117,23 +198,160 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
       <div className="between">
         <div>
           <div className="crumbs">דוחות</div>
-          <div className="page-title" style={{ fontSize: 22, marginTop: 4 }}>מכירות עובדים</div>
+          <div className="page-title" style={{ fontSize: 22, marginTop: 4 }}>
+            עובדים — {subTab === 'sales' ? 'מכירות' : 'שכר'}
+          </div>
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-            {employees.length} עובדים · {daysWithData} ימי נתונים
-            {activeBranch !== 'both' && (
-              <span> · {activeBranch === 'mikado' ? 'מיקדו' : 'כוכב הצפון'} (עובדים שעבדו בסניף; סכומים מאוחדים לכל הסניפים)</span>
+            {subTab === 'sales' ? (
+              <>
+                {employees.length} עובדים · {daysWithData} ימי נתונים
+                {activeBranch !== 'both' && (
+                  <span> · {activeBranch === 'mikado' ? 'מיקדו' : 'כוכב הצפון'} (עובדים שעבדו בסניף; סכומים מאוחדים לכל הסניפים)</span>
+                )}
+              </>
+            ) : (
+              <>{(window.EMPLOYEES || []).length} עובדים פעילים · חודש: {monthLabel(payrollMonth)}</>
             )}
           </div>
         </div>
         <div className="chips">
-          {periods.map((p) => (
+          {subTab === 'sales' && periods.map((p) => (
             <button key={p.v} className={`chip ${period === p.v ? 'active' : ''}`}
                     onClick={() => setPeriod(p.v)}>{p.label}</button>
           ))}
+          {subTab === 'payroll' && (
+            <select className="select" value={payrollMonth}
+                    onChange={e => setPayrollMonth(e.target.value)}
+                    style={{ padding: '6px 12px', fontSize: 13, fontWeight: 600 }}>
+              {payrollMonths.map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
+            </select>
+          )}
         </div>
       </div>
 
-      {employees.length === 0 ? (
+      {/* בורר לשוניות */}
+      <div className="row" style={{ gap: 8, marginTop: 8 }}>
+        <button className={`chip ${subTab === 'sales' ? 'active' : ''}`} onClick={() => setSubTab('sales')}>
+          📊 מכירות
+        </button>
+        <button className={`chip ${subTab === 'payroll' ? 'active' : ''}`} onClick={() => setSubTab('payroll')}>
+          💰 שכר
+        </button>
+      </div>
+
+      {/* ════════════ לשונית שכר ════════════ */}
+      {subTab === 'payroll' && (() => {
+        const emps = window.EMPLOYEES || [];
+        if (!emps.length) {
+          return (
+            <Card>
+              <div style={{ padding: 48, textAlign: 'center', color: 'var(--ink-3)' }}>
+                <IUsers size={40} style={{ opacity: 0.3, marginBottom: 16, display: 'block', margin: '0 auto 16px' }} />
+                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>אין עובדים במערכת</div>
+                <div style={{ fontSize: 13 }}>הוסף עובדים במסך הגדרות → ניהול עובדים.</div>
+              </div>
+            </Card>
+          );
+        }
+        // חישובים לכל שורה
+        const rows = emps.map((emp) => {
+          const local = hoursLocal[emp.id] || {};
+          const h = { regular_hours: local.reg, extra_hours_125: local.e125, extra_hours_150: local.e150 };
+          const p = window.calcPayroll(emp, h);
+          return { emp, h, p, hasInput: (Number(local.reg)||0) + (Number(local.e125)||0) + (Number(local.e150)||0) > 0 };
+        });
+        const sumGross = rows.reduce((a, r) => a + r.p.gross, 0);
+        const sumAdd   = rows.reduce((a, r) => a + r.p.additions, 0);
+        const sumTotal = rows.reduce((a, r) => a + r.p.total, 0);
+
+        return (
+          <Card title={`חישוב שכר — ${monthLabel(payrollMonth)}`}
+                sub="הזן שעות לכל עובד · ברוטו + הפרשות מעסיק מחושב אוטומטית">
+            <div className="table-wrap">
+              <table className="tbl" style={{ minWidth: 920 }}>
+                <thead>
+                  <tr>
+                    <th>עובד</th>
+                    <th style={te}>שכר/שעה</th>
+                    <th style={tc}>רגילות</th>
+                    <th style={tc}>×1.25</th>
+                    <th style={tc}>×1.5</th>
+                    <th style={te}>ברוטו</th>
+                    <th style={te}>הפרשות</th>
+                    <th style={te}>עלות מעסיק</th>
+                    <th style={tc}>שמור</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(({ emp, p, hasInput }) => {
+                    const local = hoursLocal[emp.id] || {};
+                    const tipParts = [
+                      `פנסיה ₪${Math.round(p.pension)}`,
+                      `פיצויים ₪${Math.round(p.severance)}`,
+                      emp.include_fund ? `קרן השתלמות ₪${Math.round(p.fund)}` : null,
+                      `ביטוח לאומי ₪${Math.round(p.bituach)}`,
+                    ].filter(Boolean).join(' · ');
+                    return (
+                      <tr key={emp.id}>
+                        <td style={{ fontWeight: 600 }}>
+                          {emp.name}{emp.last_name ? ` ${emp.last_name}` : ''}
+                        </td>
+                        <td style={te}>{emp.hourly_rate ? fmt(emp.hourly_rate) : <span className="muted">—</span>}</td>
+                        <td style={tc}>
+                          <input className="input" type="number" min="0" step="0.5" value={local.reg ?? ''}
+                                 onChange={e => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], reg: e.target.value } }))}
+                                 style={{ width: 70, padding: '4px 6px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }} />
+                        </td>
+                        <td style={tc}>
+                          <input className="input" type="number" min="0" step="0.5" value={local.e125 ?? ''}
+                                 onChange={e => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], e125: e.target.value } }))}
+                                 style={{ width: 60, padding: '4px 6px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }} />
+                        </td>
+                        <td style={tc}>
+                          <input className="input" type="number" min="0" step="0.5" value={local.e150 ?? ''}
+                                 onChange={e => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], e150: e.target.value } }))}
+                                 style={{ width: 60, padding: '4px 6px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }} />
+                        </td>
+                        <td style={{ ...te, fontWeight: 700 }}>{fmt(p.gross)}</td>
+                        <td style={te} title={tipParts}>
+                          <span style={{ color: 'var(--ink-2)', cursor: 'help', borderBottom: '1px dotted var(--ink-3)' }}>
+                            {fmt(p.additions)}
+                          </span>
+                        </td>
+                        <td style={{ ...te, fontWeight: 700, color: 'var(--danger)' }}>{fmt(p.total)}</td>
+                        <td style={tc}>
+                          <button className="btn btn-sm btn-primary"
+                                  onClick={() => savePayrollRow(emp)}
+                                  disabled={savingEmp === emp.id || !emp.hourly_rate}
+                                  title={!emp.hourly_rate ? 'הגדר שכר שעתי בהגדרות' : 'שמור'}>
+                            {savingEmp === emp.id ? '…' : '💾'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ fontWeight: 700, borderTop: '2px solid var(--line)', background: 'var(--surface-2)' }}>
+                    <td colSpan={5} style={{ fontWeight: 700 }}>סה״כ</td>
+                    <td style={{ ...te, fontWeight: 700 }}>{fmt(sumGross)}</td>
+                    <td style={{ ...te, fontWeight: 700 }}>{fmt(sumAdd)}</td>
+                    <td style={{ ...te, fontWeight: 700, color: 'var(--danger)' }}>{fmt(sumTotal)}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <div className="muted" style={{ fontSize: 12, padding: 14, lineHeight: 1.6 }}>
+              💡 שמירה לעובד תעדכן אוטומטית גם את שדה <b>"שכר עובדים"</b> ב-monthly_finance עם עלות המעסיק האמיתית.
+              <br />ברירות מחדל להפרשות נטענות מהגדרת העובד (ניתן לשנות בהגדרות → ניהול עובדים).
+            </div>
+          </Card>
+        );
+      })()}
+
+      {/* ════════════ לשונית מכירות (קוד קיים) ════════════ */}
+      {subTab === 'sales' && (employees.length === 0 ? (
         <Card>
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--ink-3)' }}>
             <IUsers size={40} style={{ opacity: 0.3, marginBottom: 16, display: 'block', margin: '0 auto 16px' }} />
@@ -257,7 +475,7 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
             </Card>
           )}
         </>
-      )}
+      ))}
     </div>
   );
 };

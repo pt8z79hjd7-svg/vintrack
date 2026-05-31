@@ -231,6 +231,66 @@ const Settings = ({ activeBranch = 'both' }) => {
     setTimeout(() => window.refreshData && window.refreshData('promo-cat-del'), 400);
   };
 
+  // ─── ניהול עובדים ───
+  const employees = window.EMPLOYEES || [];
+  const [editingEmpId, setEditingEmpId] = useState(null);   // null = מצב חדש, אחרת id לעריכה
+  const [empForm, setEmpForm] = useState({
+    name: '', last_name: '', hourly_rate: '',
+    pension_pct: 6.5, severance_pct: 8.33, fund_pct: 7.5, include_fund: true,
+  });
+  const [empBusy, setEmpBusy] = useState(false);
+
+  const resetEmpForm = () => {
+    setEditingEmpId(null);
+    setEmpForm({ name: '', last_name: '', hourly_rate: '', pension_pct: 6.5, severance_pct: 8.33, fund_pct: 7.5, include_fund: true });
+  };
+
+  const startEditEmp = (emp) => {
+    setEditingEmpId(emp.id);
+    setEmpForm({
+      name: emp.name || '', last_name: emp.last_name || '',
+      hourly_rate: emp.hourly_rate ?? '',
+      pension_pct: emp.pension_pct ?? 6.5,
+      severance_pct: emp.severance_pct ?? 8.33,
+      fund_pct: emp.fund_pct ?? 7.5,
+      include_fund: emp.include_fund !== false,
+    });
+  };
+
+  const saveEmp = async () => {
+    if (!empForm.name?.trim()) { (window.toast?.warn || alert)('הזן שם פרטי'); return; }
+    setEmpBusy(true);
+    const payload = {
+      name: empForm.name.trim(),
+      last_name: (empForm.last_name || '').trim(),
+      hourly_rate: Number(empForm.hourly_rate) || 0,
+      pension_pct: Number(empForm.pension_pct) || 0,
+      severance_pct: Number(empForm.severance_pct) || 0,
+      fund_pct: Number(empForm.fund_pct) || 0,
+      include_fund: !!empForm.include_fund,
+      updated_at: new Date().toISOString(),
+    };
+    let error;
+    if (editingEmpId) {
+      ({ error } = await window.sb.from('employees').update(payload).eq('id', editingEmpId));
+    } else {
+      ({ error } = await window.sb.from('employees').insert(payload));
+    }
+    setEmpBusy(false);
+    if (error) { (window.toast?.error || alert)('שמירה נכשלה: ' + error.message); return; }
+    (window.toast?.success || alert)(editingEmpId ? '✓ עובד עודכן' : '✓ עובד נוסף');
+    resetEmpForm();
+    setTimeout(() => window.refreshData && window.refreshData('emp-save'), 400);
+  };
+
+  const toggleEmpActive = async (emp) => {
+    setEmpBusy(true);
+    const { error } = await window.sb.from('employees').update({ is_active: !emp.is_active }).eq('id', emp.id);
+    setEmpBusy(false);
+    if (error) { (window.toast?.error || alert)('שגיאה: ' + error.message); return; }
+    setTimeout(() => window.refreshData && window.refreshData('emp-toggle'), 400);
+  };
+
   return (
     <div className="page">
       <div className="between">
@@ -478,7 +538,116 @@ const Settings = ({ activeBranch = 'both' }) => {
             <span className="muted" style={{ fontSize: 12 }}>רווח גולמי ומחזור נמשכים אוטומטית מהסיכום החודשי.</span>
           </div>
           <div className="muted" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
-            💡 שעות עובדים — ייובאו בעתיד אוטומטית מ-CashOnTab (דורש לימוד דוח השעות). כרגע הזן סך שכר ידני.
+            💡 שכר עובדים — אם הוזנו שעות במסך "עובדים → שכר", השדה <b>"שכר עובדים"</b> ידרס אוטומטית בעלות מעסיק האמיתית.
+          </div>
+        </div>
+      </Card>
+
+      {/* ניהול עובדים */}
+      <Card title="👥 ניהול עובדים" sub="שכר שעתי + הפרשות מעסיק ברירת מחדל לכל עובד">
+        <div style={{ padding: 18 }}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>שם</th>
+                  <th>משפחה</th>
+                  <th style={{ textAlign: 'end' }}>שכר/שעה</th>
+                  <th style={{ textAlign: 'center' }}>פנסיה%</th>
+                  <th style={{ textAlign: 'center' }}>פיצויים%</th>
+                  <th style={{ textAlign: 'center' }}>קרן%</th>
+                  <th style={{ textAlign: 'center' }}>פעיל</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {employees.length ? employees.map(emp => (
+                  <tr key={emp.id} style={editingEmpId === emp.id ? { background: 'var(--accent-soft)' } : {}}>
+                    <td style={{ fontWeight: 600 }}>{emp.name}</td>
+                    <td>{emp.last_name || '—'}</td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>
+                      {emp.hourly_rate ? `₪${Number(emp.hourly_rate).toFixed(2)}` : <span className="muted">—</span>}
+                    </td>
+                    <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{Number(emp.pension_pct ?? 6.5)}%</td>
+                    <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{Number(emp.severance_pct ?? 8.33)}%</td>
+                    <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
+                      {emp.include_fund ? `${Number(emp.fund_pct ?? 7.5)}%` : <span className="muted">לא</span>}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span className={`badge ${emp.is_active ? 'ok' : ''}`}>{emp.is_active ? 'כן' : 'לא'}</span>
+                    </td>
+                    <td style={{ textAlign: 'end' }}>
+                      <button className="btn btn-sm btn-ghost" onClick={() => startEditEmp(emp)} disabled={empBusy}>ערוך</button>
+                      <button className="btn btn-sm btn-ghost" onClick={() => toggleEmpActive(emp)} disabled={empBusy}
+                              style={{ color: emp.is_active ? 'var(--danger)' : 'var(--ok)' }}>
+                        {emp.is_active ? 'השבת' : 'הפעל'}
+                      </button>
+                    </td>
+                  </tr>
+                )) : <tr><td colSpan="8" style={{ textAlign: 'center', padding: 20, color: 'var(--ink-3)' }}>אין עובדים — הוסף למטה</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
+          {/* טופס הוספה/עריכה */}
+          <div style={{ marginTop: 16, padding: 14, background: 'var(--surface-2, rgba(0,0,0,0.03))', borderRadius: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>
+              {editingEmpId ? '✏ עריכת עובד' : '+ עובד חדש'}
+            </div>
+            <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>שם פרטי *</div>
+                <input className="input" value={empForm.name}
+                       onChange={e => setEmpForm(v => ({ ...v, name: e.target.value }))}
+                       style={{ width: 110, padding: '6px 8px' }} />
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>שם משפחה</div>
+                <input className="input" value={empForm.last_name}
+                       onChange={e => setEmpForm(v => ({ ...v, last_name: e.target.value }))}
+                       style={{ width: 110, padding: '6px 8px' }} />
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>שכר/שעה ₪</div>
+                <input className="input" type="number" step="0.5" value={empForm.hourly_rate}
+                       onChange={e => setEmpForm(v => ({ ...v, hourly_rate: e.target.value }))}
+                       style={{ width: 90, padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }} />
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>פנסיה %</div>
+                <input className="input" type="number" step="0.1" value={empForm.pension_pct}
+                       onChange={e => setEmpForm(v => ({ ...v, pension_pct: e.target.value }))}
+                       style={{ width: 70, padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }} />
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>פיצויים %</div>
+                <input className="input" type="number" step="0.01" value={empForm.severance_pct}
+                       onChange={e => setEmpForm(v => ({ ...v, severance_pct: e.target.value }))}
+                       style={{ width: 70, padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }} />
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>קרן %</div>
+                <input className="input" type="number" step="0.1" value={empForm.fund_pct}
+                       onChange={e => setEmpForm(v => ({ ...v, fund_pct: e.target.value }))}
+                       style={{ width: 70, padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}
+                       disabled={!empForm.include_fund} />
+              </div>
+              <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center', padding: '6px 0' }}>
+                <input type="checkbox" checked={!!empForm.include_fund}
+                       onChange={e => setEmpForm(v => ({ ...v, include_fund: e.target.checked }))} />
+                <span style={{ fontSize: 12 }}>כלל קרן השתלמות</span>
+              </label>
+              <button className="btn btn-primary" onClick={saveEmp} disabled={empBusy}>
+                {empBusy ? '...שומר' : (editingEmpId ? 'עדכן' : 'הוסף')}
+              </button>
+              {editingEmpId && (
+                <button className="btn btn-ghost" onClick={resetEmpForm} disabled={empBusy}>ביטול</button>
+              )}
+            </div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 12, lineHeight: 1.5 }}>
+              ברירות מחדל לפי חוק ישראלי 2026: פנסיה מעסיק 6.5% · פיצויים 8.33% · קרן השתלמות 7.5% (אם נכלל).
+              <br />ביטוח לאומי מעסיק מחושב אוטומטית במדרגות (3.55% עד ₪7,522 · 7.6% מעל) במסך השכר.
+            </div>
           </div>
         </div>
       </Card>
