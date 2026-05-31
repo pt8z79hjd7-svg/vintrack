@@ -375,6 +375,87 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         );
       })()}
 
+      {/* ─── דוח רווח והפסד (P&L) — מחזור מול רכש מול הוצאות ─── */}
+      {(() => {
+        const F = (window.FINANCE && window.FINANCE.current) || {};
+        const rev = F.revenue || monthRaw.total || 0;
+        const purch = F.purchases || 0;
+        const inc = F.totalIncome || 0;
+        const salCalc = F.salaries_calculated || 0;
+        const exp = F.totalExpense || 0;
+        const otherExp = exp - salCalc;
+        const plNet = rev + inc - purch - exp;
+        const plMargin = rev > 0 ? (plNet / rev) * 100 : 0;
+        const hasPurch = purch > 0;
+        const hasExp = exp > 0;
+        const plOK = plNet >= 0;
+        const lineS = { display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 13 };
+        const sepS = { borderTop: '1px solid var(--line)', margin: '4px 0' };
+        const totS = { display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 15, fontWeight: 800 };
+        return (
+          <div className="card" style={{ padding: '16px 20px', borderRight: '3px solid var(--accent-strong)' }}>
+            <div className="between" style={{ alignItems: 'flex-start', marginBottom: 14 }}>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>דוח רווח והפסד (P&L) · {monthRaw.m || ''}</div>
+                <div className="muted" style={{ fontSize: 10.5, marginTop: 2 }}>
+                  מחזור בפועל מול עלות רכש סחורה + הוצאות תפעוליות
+                </div>
+              </div>
+              <button className="btn btn-sm btn-ghost" onClick={() => onNav('monthly')}>סיכום חודשי →</button>
+            </div>
+            <div style={{ maxWidth: 440 }}>
+              <div style={lineS}>
+                <span>מחזור מכירות (ללא מע״מ)</span>
+                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(rev))}</span>
+              </div>
+              {inc > 0 && (
+                <div style={lineS}>
+                  <span style={{ color: 'var(--accent-strong)' }}>+ הכנסות חוץ-קופה (וולט/תן-ביס)</span>
+                  <span style={{ fontWeight: 600, color: 'var(--accent-strong)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(inc))}</span>
+                </div>
+              )}
+              <div style={sepS} />
+              <div style={lineS}>
+                <span style={{ color: 'var(--danger)' }}>− רכש סחורה (ת.מ. רכש)</span>
+                <span style={{ fontWeight: 600, color: 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
+                  {hasPurch ? fmtCurrency(Math.round(purch)) : <span className="muted">—</span>}
+                </span>
+              </div>
+              {salCalc > 0 && (
+                <div style={lineS}>
+                  <span style={{ color: 'var(--danger)' }}>− שכר עובדים ({F.payroll_employees || 0} עובדים)</span>
+                  <span style={{ fontWeight: 600, color: 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(salCalc))}</span>
+                </div>
+              )}
+              {otherExp > 0 && (
+                <div style={lineS}>
+                  <span style={{ color: 'var(--danger)' }}>− הוצאות תפעוליות (שכ״ד/חשמל/ארנונה…)</span>
+                  <span style={{ fontWeight: 600, color: 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(otherExp))}</span>
+                </div>
+              )}
+              <div style={{ borderTop: '2px solid var(--ink-1)', margin: '6px 0' }} />
+              <div style={totS}>
+                <span>= שורה תחתונה</span>
+                <span style={{ color: plOK ? 'var(--ok)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtCurrency(Math.round(plNet))}
+                  <span style={{ fontSize: 12, fontWeight: 500, marginInlineStart: 6 }}>({plMargin.toFixed(1)}%)</span>
+                </span>
+              </div>
+            </div>
+            {!hasPurch && (
+              <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
+                ⚠ אין נתוני רכש לחודש זה — הרץ את המחזור כדי לסנכרן תעודות רכש.
+              </div>
+            )}
+            {!hasExp && (
+              <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                💡 לחישוב מלא הזן הוצאות חודשיות בהגדרות.
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ─── סיכום מכירות יומי + חודשי מעודכן ─── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Card

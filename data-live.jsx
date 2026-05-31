@@ -152,6 +152,7 @@ async function loadAllData() {
     .map((r) => ({
       month: r.month, m: mlabel(r.month), total: n(r.revenue_total), mikado: n(r.revenue_mikado), kohav: n(r.revenue_kochav),
       profit: n(r.profit_est), margin: n(r.margin_pct), days: n(r.days_active),
+      purchases: n(r.purchases),
       extra: n(r.additional_income), current: r.month === curMonth,
     }));
 
@@ -295,9 +296,23 @@ async function loadAllData() {
   const _curM = MONTHLY.find((x) => x.current) || null;
   FINANCE.current.grossProfit = _curM ? _curM.profit : 0;
   FINANCE.current.revenue = _curM ? _curM.total : 0;
+  FINANCE.current.purchases = _curM ? (_curM.purchases || 0) : 0;
   FINANCE.current.netProfit = FINANCE.current.grossProfit + FINANCE.current.totalIncome - FINANCE.current.totalExpense;
   FINANCE.current.netMargin = FINANCE.current.revenue > 0
     ? (FINANCE.current.netProfit / FINANCE.current.revenue) * 100 : 0;
+  // P&L (תזרימי): הכנסות − רכש סחורה − הוצאות תפעוליות
+  FINANCE.current.plProfit = FINANCE.current.revenue + FINANCE.current.totalIncome - FINANCE.current.purchases - FINANCE.current.totalExpense;
+  FINANCE.current.plMargin = FINANCE.current.revenue > 0
+    ? (FINANCE.current.plProfit / FINANCE.current.revenue) * 100 : 0;
+  // P&L לכל חודש ב-byMonth
+  MONTHLY.forEach(function(m) {
+    const fm = FINANCE.byMonth[m.month];
+    const purch = m.purchases || 0;
+    const inc = fm ? fm.totalIncome : 0;
+    const exp = fm ? fm.totalExpense : 0;
+    m.plProfit = m.total + inc - purch - exp;
+    m.purchases = purch;
+  });
 
   // ─── אם יש שעות עובדים לחודש הנוכחי — דרוס את salaries בעלות מעסיק האמיתית ───
   if (EMPLOYEES.length && Object.keys(EMPLOYEE_HOURS).length) {
@@ -332,6 +347,9 @@ async function loadAllData() {
       FINANCE.current.netProfit = FINANCE.current.grossProfit + FINANCE.current.totalIncome - FINANCE.current.totalExpense;
       FINANCE.current.netMargin = FINANCE.current.revenue > 0
         ? (FINANCE.current.netProfit / FINANCE.current.revenue) * 100 : 0;
+      FINANCE.current.plProfit = FINANCE.current.revenue + FINANCE.current.totalIncome - FINANCE.current.purchases - FINANCE.current.totalExpense;
+      FINANCE.current.plMargin = FINANCE.current.revenue > 0
+        ? (FINANCE.current.plProfit / FINANCE.current.revenue) * 100 : 0;
     }
   }
 

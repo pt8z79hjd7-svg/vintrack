@@ -18,6 +18,7 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
   const _curMonthKey = new Date().toISOString().slice(0, 7);
   const [payrollMonth, setPayrollMonth] = useState(_curMonthKey);
   const [hoursLocal, setHoursLocal] = useState({});   // key emp.id → {reg, e125, e150}
+  const [rateLocal, setRateLocal] = useState({});     // key emp.id → hourly_rate string
   const [savingEmp, setSavingEmp] = useState(null);
 
   const fmt = (v) => `₪${Math.round(v || 0).toLocaleString('he-IL')}`;
@@ -37,6 +38,11 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
       };
     });
     setHoursLocal(init);
+    const rInit = {};
+    (window.EMPLOYEES || []).forEach((emp) => {
+      rInit[emp.id] = emp.hourly_rate != null ? String(emp.hourly_rate) : '';
+    });
+    setRateLocal(rInit);
   }, [subTab, payrollMonth, window.LAST_REFRESH]);
 
   // רשימת חודשים לבחירה — חודש נוכחי + 17 אחרונים מ-MONTHLY
@@ -65,6 +71,13 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
     };
     setSavingEmp(emp.id);
     try {
+      // שמירת שכר/שעה אם השתנה
+      const newRate = Number(rateLocal[emp.id]) || 0;
+      if (newRate !== (Number(emp.hourly_rate) || 0)) {
+        const { error: rErr } = await window.sb.from('employees').update({ hourly_rate: newRate, updated_at: new Date().toISOString() }).eq('id', emp.id);
+        if (rErr) throw rErr;
+        emp.hourly_rate = newRate;
+      }
       const { error } = await window.sb.from('employee_hours').upsert(payload, { onConflict: 'employee_id,month' });
       if (error) throw error;
       // עדכון מקומי כדי לא לחכות ל-refresh
@@ -77,8 +90,9 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
       (window.EMPLOYEES || []).forEach((e2) => {
         const h2 = window.EMPLOYEE_HOURS[`${e2.id}__${payrollMonth}`];
         if (!h2) return;
-        const p2 = window.calcPayroll(e2, h2);
-        grossSum += p2.total;  // עלות מעסיק כוללת
+        const e2WithRate = { ...e2, hourly_rate: Number(rateLocal[e2.id] ?? e2.hourly_rate) || 0 };
+        const p2 = window.calcPayroll(e2WithRate, h2);
+        grossSum += p2.total;
       });
       if (grossSum > 0) {
         const finRow = (window.FINANCE?.byMonth || {})[payrollMonth];
@@ -257,7 +271,9 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
         const rows = emps.map((emp) => {
           const local = hoursLocal[emp.id] || {};
           const h = { regular_hours: local.reg, extra_hours_125: local.e125, extra_hours_150: local.e150 };
-          const p = window.calcPayroll(emp, h);
+          const rateVal = rateLocal[emp.id] != null ? rateLocal[emp.id] : emp.hourly_rate;
+          const empWithRate = { ...emp, hourly_rate: Number(rateVal) || 0 };
+          const p = window.calcPayroll(empWithRate, h);
           return { emp, h, p, hasInput: (Number(local.reg)||0) + (Number(local.e125)||0) + (Number(local.e150)||0) > 0 };
         });
         const sumGross = rows.reduce((a, r) => a + r.p.gross, 0);
@@ -296,7 +312,13 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
                         <td style={{ fontWeight: 600 }}>
                           {emp.name}{emp.last_name ? ` ${emp.last_name}` : ''}
                         </td>
-                        <td style={te}>{emp.hourly_rate ? fmt(emp.hourly_rate) : <span className="muted">—</span>}</td>
+                        <td style={te}>
+                          <input className="input" type="number" min="0" step="1"
+                                 value={rateLocal[emp.id] ?? ''}
+                                 onChange={e => setRateLocal(s => ({ ...s, [emp.id]: e.target.value }))}
+                                 placeholder="₪/שעה"
+                                 style={{ width: 75, padding: '4px 6px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }} />
+                        </td>
                         <td style={tc}>
                           <input className="input" type="number" min="0" step="0.5" value={local.reg ?? ''}
                                  onChange={e => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], reg: e.target.value } }))}
@@ -322,8 +344,8 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
                         <td style={tc}>
                           <button className="btn btn-sm btn-primary"
                                   onClick={() => savePayrollRow(emp)}
-                                  disabled={savingEmp === emp.id || !emp.hourly_rate}
-                                  title={!emp.hourly_rate ? 'הגדר שכר שעתי בהגדרות' : 'שמור'}>
+                                  disabled={savingEmp === emp.id || !(Number(rateLocal[emp.id]) > 0)}
+                                  title={!(Number(rateLocal[emp.id]) > 0) ? 'הזן שכר שעתי' : 'שמור'}>
                             {savingEmp === emp.id ? '…' : '💾'}
                           </button>
                         </td>
@@ -343,8 +365,8 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
               </table>
             </div>
             <div className="muted" style={{ fontSize: 12, padding: 14, lineHeight: 1.6 }}>
-              💡 שמירה לעובד תעדכן אוטומטית גם את שדה <b>"שכר עובדים"</b> ב-monthly_finance עם עלות המעסיק האמיתית.
-              <br />ברירות מחדל להפרשות נטענות מהגדרת העובד (ניתן לשנות בהגדרות → ניהול עובדים).
+              💡 הזן שכר/שעה + שעות ולחץ שמור. שינוי שכר נשמר גם בכרטיס העובד.
+              <br />הפרשות מעסיק (פנסיה/פיצויים/קרן/ב.ל.) מחושבות אוטומטית לפי הגדרות העובד.
             </div>
           </Card>
         );

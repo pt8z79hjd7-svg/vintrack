@@ -672,6 +672,64 @@ const Monthly = ({ activeBranch = 'both' }) => {
         </div>
       </Card>
 
+      {/* ─── טבלת רווח והפסד (P&L) — מחזור מול רכש מול הוצאות ─── */}
+      <Card title="📊 רווח והפסד (P&L)" sub="מחזור − רכש סחורה − הוצאות = שורה תחתונה">
+        <div className="table-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>חודש</th>
+                <th style={{ textAlign: 'end' }}>מחזור</th>
+                <th style={{ textAlign: 'end' }}>רכש סחורה</th>
+                <th style={{ textAlign: 'end' }}>רווח גולמי</th>
+                <th style={{ textAlign: 'end' }}>חוץ-קופה</th>
+                <th style={{ textAlign: 'end' }}>הוצאות</th>
+                <th style={{ textAlign: 'end' }}>P&L נטו</th>
+                <th style={{ textAlign: 'end' }}>% P&L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...sel].reverse().map((m) => {
+                const finRow = (window.FINANCE?.byMonth || {})[m.month] || {};
+                const ext = (Number(finRow.wolt) || 0) + (Number(finRow.tenbis) || 0) + (Number(finRow.external_sales) || 0);
+                const expTotal = (finRow.totalExpense || 0);
+                const purch = m.purchases || 0;
+                const plNet = m.total + ext - purch - expTotal;
+                const plPct = m.total > 0 ? (plNet / m.total) * 100 : 0;
+                const plOK = plNet >= 0;
+                const numS = { textAlign: 'end', fontVariantNumeric: 'tabular-nums' };
+                return (
+                  <tr key={`pl-${m.m}`} style={m.current ? { background: 'var(--accent-soft)' } : {}}>
+                    <td style={{ fontWeight: 700 }}>{m.m}{m.current && <Badge tone="accent" style={{ marginInlineStart: 6 }}>נוכחי</Badge>}</td>
+                    <td style={{ ...numS, fontWeight: 700 }}>₪{Math.round(m.total).toLocaleString('he-IL')}</td>
+                    <td style={{ ...numS, color: purch > 0 ? 'var(--danger)' : 'var(--ink-3)' }}>
+                      {purch > 0 ? `₪${Math.round(purch).toLocaleString('he-IL')}` : '—'}
+                    </td>
+                    <td style={{ ...numS, fontWeight: 600, color: 'var(--ok)' }}>₪{Math.round(m.profit).toLocaleString('he-IL')}</td>
+                    <td style={{ ...numS, color: ext > 0 ? 'var(--accent-strong)' : 'var(--ink-3)' }}>
+                      {ext > 0 ? `₪${Math.round(ext).toLocaleString('he-IL')}` : '—'}
+                    </td>
+                    <td style={{ ...numS, color: expTotal > 0 ? 'var(--danger)' : 'var(--ink-3)' }}>
+                      {expTotal > 0 ? `₪${Math.round(expTotal).toLocaleString('he-IL')}` : '—'}
+                    </td>
+                    <td style={{ ...numS, fontWeight: 800, color: plOK ? 'var(--ok)' : 'var(--danger)' }}>
+                      ₪{Math.round(plNet).toLocaleString('he-IL')}
+                    </td>
+                    <td style={{ textAlign: 'end' }}>
+                      <span className={`badge ${plPct >= 10 ? 'ok' : plPct >= 0 ? 'warn' : 'danger'}`}>{plPct.toFixed(1)}%</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="muted" style={{ fontSize: 11, padding: 14, lineHeight: 1.5 }}>
+          💡 <b>P&L נטו</b> = מחזור + הכנסות חוץ-קופה − רכש סחורה (ת.מ. רכש) − הוצאות (שכר/שכירות/חשמל...).
+          <br />שים לב: רכש גדול בחודש אחד עשוי להימכר לאורך מספר חודשים — זו תמונת תזרים, לא margin.
+        </div>
+      </Card>
+
       {/* ─── רווח אמיתי — לחודש הנבחר האחרון (=הנוכחי בדרך כלל) ─── */}
       {(() => {
         const cur = sel[sel.length - 1];
