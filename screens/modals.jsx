@@ -26,6 +26,42 @@ const ProductDetailModal = ({ product, onClose }) => {
   const [parallel, setParallel] = useState(product.parallel);
   const supName = SUPPLIERS.find(s => s.id === supplier)?.name || supplier;
 
+  // ─── מיזוג עם מוצר קיים ───
+  const [showMergeSearch, setShowMergeSearch] = useState(false);
+  const [mergeQuery, setMergeQuery] = useState('');
+  // ─── יצירת מוצר עצמאי מייבוא מקביל ───
+  const [createStandalone, setCreateStandalone] = useState(false);
+  const [standaloneName, setStandaloneName] = useState('');
+
+  // נורמליזציית עברית — מסיר ו/י נפרדים (לטיפול ב"נועם"/"נעם")
+  const _normHe = (s) => (s || '').replace(/[וי]/g, '').replace(/\s+/g, '').toLowerCase();
+
+  const mergeCandidates = React.useMemo(() => {
+    const q = _normHe(mergeQuery);
+    if (!q || q.length < 2) return [];
+    const list = (window.PRODUCTS || [])
+      .filter(p => p.sku !== product.sku && _normHe(p.name).includes(q))
+      .slice(0, 8);
+    return list;
+  }, [mergeQuery, product.sku]);
+
+  const parallelAsExistingProduct = React.useMemo(() => {
+    if (!parallel || !parallel.sku) return null;
+    return (window.PRODUCTS || []).find(p => p.sku === parallel.sku) || null;
+  }, [parallel]);
+
+  const pickMergeTarget = (other) => {
+    setParallel({
+      sku: other.sku,
+      supplier: other.supplier,
+      cost: other.cost,
+      stock: { mikado: other.stock.mikado, kohav: other.stock.kohav },
+      unify: true,
+    });
+    setShowMergeSearch(false);
+    setMergeQuery('');
+  };
+
   // ─── מבצע לקוחות ───
   const [cats, setCats] = useState(window.PROMO_CATEGORIES || []);
   const [promoId, setPromoId] = useState(product.promo?.id || '');
@@ -97,11 +133,31 @@ const ProductDetailModal = ({ product, onClose }) => {
                 min_stock: Math.max(0, Number(minStock) || 0),
                 ...parallelUpdate })
       .eq('barcode', product.sku);
-    setSaving(false);
     if (error) {
+      setSaving(false);
       (window.toast?.error || alert)('שמירה נכשלה: ' + error.message);
       return;
     }
+    // יצירת מוצר עצמאי מהייבוא המקביל (אם נבחר ולא קיים כבר)
+    if (parallel && createStandalone && parallel.sku && !parallelAsExistingProduct) {
+      const nm = (standaloneName || product.name + ' (משני)').trim();
+      const { error: sErr } = await window.sb.from('products').insert({
+        barcode: parallel.sku, name: nm,
+        category: product.catLabel || null,
+        supplier: parallel.supplier || null,
+        cost_price: Number(parallel.cost) || 0,
+        sell_price: Number(price) || 0,
+        is_active: true, min_stock: Math.max(0, Number(minStock) || 0),
+        stock_mikado: Number(parallel?.stock?.mikado) || 0,
+        stock_kochav: Number(parallel?.stock?.kohav) || 0,
+      });
+      if (sErr) {
+        setSaving(false);
+        (window.toast?.error || alert)('המוצר הראשי נשמר אבל יצירת מוצר עצמאי נכשלה: ' + sErr.message);
+        return;
+      }
+    }
+    setSaving(false);
     setSaved(true); setEditing(false);
     (window.toast?.success || alert)('✓ נשמר. יעבור לצינור עד 5 דק׳');
     setTimeout(() => window.refreshData && window.refreshData('post-save'), 500);
@@ -417,14 +473,92 @@ const ProductDetailModal = ({ product, onClose }) => {
                 חיסכון של ₪{(product.cost - parallel.cost).toFixed(2)} ליחידה לעומת הספק הראשי
               </div>
             )}
+            {/* "צור גם כמוצר עצמאי" — רק אם הברקוד חדש (לא כבר במערכת) */}
+            {parallel.sku && (
+              parallelAsExistingProduct ? (
+                <div className="muted" style={{ fontSize: 11.5, marginTop: 8, padding: 6,
+                                                background: 'var(--accent-soft)', borderRadius: 6 }}>
+                  ℹ️ ברקוד {parallel.sku} כבר קיים כמוצר: <b>{parallelAsExistingProduct.name}</b>
+                  {parallel.unify && ' · יאוחד תחת המוצר הראשי'}
+                </div>
+              ) : (
+                <div style={{ marginTop: 10, padding: 10, border: '1px dashed var(--line)', borderRadius: 6 }}>
+                  <label className="row" style={{ gap: 8, cursor: 'pointer', alignItems: 'flex-start' }}>
+                    <input type="checkbox" checked={createStandalone}
+                           onChange={e => setCreateStandalone(e.target.checked)}
+                           style={{ marginTop: 2 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>צור גם כמוצר עצמאי במלאי</div>
+                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                        הברקוד {parallel.sku} יתווסף ל-products. שימושי כדי שהסורק/דוחות יזהו אותו.
+                      </div>
+                    </div>
+                  </label>
+                  {createStandalone && (
+                    <div style={{ marginTop: 8 }}>
+                      <div className="muted" style={{ fontSize: 11 }}>שם המוצר העצמאי</div>
+                      <input className="input" value={standaloneName}
+                             onChange={e => setStandaloneName(e.target.value)}
+                             placeholder={product.name + ' (משני)'}
+                             style={{ width: '100%', padding: '6px 8px', fontSize: 12, marginTop: 3 }} />
+                    </div>
+                  )}
+                </div>
+              )
+            )}
           </div>
         ) : (
-          <button className="add-parallel-btn" onClick={addParallel}>
-            <IPlus size={14} /> הוסף ייבוא מקביל
-            <span className="muted" style={{ fontSize: 11, marginInlineStart: 6 }}>
-              אותו מוצר מיבואן נוסף, עם ברקוד וספק שונים
-            </span>
-          </button>
+          <div>
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              <button className="add-parallel-btn" onClick={addParallel} style={{ flex: 1, minWidth: 200 }}>
+                <IPlus size={14} /> הוסף ייבוא מקביל
+                <span className="muted" style={{ fontSize: 11, marginInlineStart: 6 }}>
+                  ברקוד חדש מספק נוסף
+                </span>
+              </button>
+              <button className="add-parallel-btn" onClick={() => setShowMergeSearch(v => !v)}
+                      style={{ flex: 1, minWidth: 200 }}>
+                🔗 אחד עם מוצר קיים
+                <span className="muted" style={{ fontSize: 11, marginInlineStart: 6 }}>
+                  שני שמות → מוצר אחד
+                </span>
+              </button>
+            </div>
+            {showMergeSearch && (
+              <div className="card" style={{ marginTop: 10, padding: 12, background: 'var(--surface-2, rgba(0,0,0,0.03))' }}>
+                <input className="input" autoFocus placeholder="חפש מוצר לפי שם (לדוגמה: נעם)"
+                       value={mergeQuery} onChange={e => setMergeQuery(e.target.value)}
+                       style={{ width: '100%', padding: '8px 10px', fontSize: 13 }} />
+                <div style={{ marginTop: 8 }}>
+                  {mergeQuery.length < 2 && (
+                    <div className="muted" style={{ fontSize: 12, textAlign: 'center', padding: 8 }}>
+                      הקלד לפחות 2 תווים — החיפוש מתעלם מ-ו/י (נעם=נועם)
+                    </div>
+                  )}
+                  {mergeQuery.length >= 2 && mergeCandidates.length === 0 && (
+                    <div className="muted" style={{ fontSize: 12, textAlign: 'center', padding: 8 }}>
+                      לא נמצא מוצר תואם
+                    </div>
+                  )}
+                  {mergeCandidates.map(c => (
+                    <button key={c.sku} onClick={() => pickMergeTarget(c)}
+                            className="btn btn-ghost"
+                            style={{ display: 'flex', justifyContent: 'space-between', width: '100%',
+                                     padding: '8px 10px', marginBottom: 4, textAlign: 'right',
+                                     border: '1px solid var(--line)', borderRadius: 6 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</div>
+                        <div className="muted mono-tiny" style={{ marginTop: 2 }}>
+                          {c.sku} · ספק: {SUPPLIERS.find(s => s.id === c.supplier)?.name || c.supplier} · מלאי: {c.total}
+                        </div>
+                      </div>
+                      <span className="badge ok">בחר</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Totals */}
