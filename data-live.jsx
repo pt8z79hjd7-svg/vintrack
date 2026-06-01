@@ -297,13 +297,13 @@ async function loadAllData() {
   FINANCE.current.grossProfit = _curM ? _curM.profit : 0;
   FINANCE.current.revenue = _curM ? _curM.total : 0;
   FINANCE.current.purchases = _curM ? (_curM.purchases || 0) : 0;
-  FINANCE.current.netProfit = FINANCE.current.grossProfit + FINANCE.current.totalIncome - FINANCE.current.totalExpense;
-  FINANCE.current.netMargin = FINANCE.current.revenue > 0
-    ? (FINANCE.current.netProfit / FINANCE.current.revenue) * 100 : 0;
-  // P&L (תזרימי): הכנסות − רכש סחורה − הוצאות תפעוליות
-  FINANCE.current.plProfit = FINANCE.current.revenue + FINANCE.current.totalIncome - FINANCE.current.purchases - FINANCE.current.totalExpense;
-  FINANCE.current.plMargin = FINANCE.current.revenue > 0
-    ? (FINANCE.current.plProfit / FINANCE.current.revenue) * 100 : 0;
+  function _recalcPL(fin) {
+    fin.netProfit = fin.grossProfit + fin.totalIncome - fin.totalExpense;
+    fin.netMargin = fin.revenue > 0 ? (fin.netProfit / fin.revenue) * 100 : 0;
+    fin.plProfit = fin.revenue + fin.totalIncome - fin.purchases - fin.totalExpense;
+    fin.plMargin = fin.revenue > 0 ? (fin.plProfit / fin.revenue) * 100 : 0;
+  }
+  _recalcPL(FINANCE.current);
   // P&L לכל חודש ב-byMonth
   MONTHLY.forEach(function(m) {
     const fm = FINANCE.byMonth[m.month];
@@ -344,12 +344,7 @@ async function loadAllData() {
       FINANCE.current.payroll_employees = _payWith;
       // החלף את הסכום הידני בעלות מעסיק המחושבת
       FINANCE.current.totalExpense = FINANCE.current.totalExpense - FINANCE.current.salaries + _payTotal;
-      FINANCE.current.netProfit = FINANCE.current.grossProfit + FINANCE.current.totalIncome - FINANCE.current.totalExpense;
-      FINANCE.current.netMargin = FINANCE.current.revenue > 0
-        ? (FINANCE.current.netProfit / FINANCE.current.revenue) * 100 : 0;
-      FINANCE.current.plProfit = FINANCE.current.revenue + FINANCE.current.totalIncome - FINANCE.current.purchases - FINANCE.current.totalExpense;
-      FINANCE.current.plMargin = FINANCE.current.revenue > 0
-        ? (FINANCE.current.plProfit / FINANCE.current.revenue) * 100 : 0;
+      _recalcPL(FINANCE.current);
     }
   }
 

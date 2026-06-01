@@ -18,9 +18,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
   const _curFallback = MONTHLY[MONTHLY.length - 1] || { total: 0, mikado: 0, kohav: 0, margin: 0, days: 0, month: _curMonthISO, m: '' };
   const _cur = _curFound || _curFallback;
   const _hasCurData = !!_curFound && _curFound.total > 0;
-  const _prev = MONTHLY.find(x => x.month !== _curMonthISO && MONTHLY.indexOf(x) === MONTHLY.length - (_curFound ? 2 : 1))
-             || MONTHLY[MONTHLY.length - (_curFound ? 2 : 1)]
-             || _cur;
+  const _prev = MONTHLY[MONTHLY.length - (_curFound ? 2 : 1)] || _cur;
   // לפי בורר הסניף: 'both' = total, 'mikado' / 'kohav' = רק אותו סניף
   const branchVal = (m) => activeBranch === 'both' ? m.total
                         : activeBranch === 'mikado' ? m.mikado

@@ -22,10 +22,11 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
   const [savingEmp, setSavingEmp] = useState(null);
 
   const fmt = (v) => `₪${Math.round(v || 0).toLocaleString('he-IL')}`;
+  const empRate = (emp) => ({ ...emp, hourly_rate: Number(rateLocal[emp.id] ?? emp.hourly_rate) || 0 });
   const te = { textAlign: 'end', fontVariantNumeric: 'tabular-nums' };
   const tc = { textAlign: 'center', fontVariantNumeric: 'tabular-nums' };
 
-  // ─── שכר: אכלוס מהזיכרון לפי חודש נבחר ───
+  // ─── שכר: אכלוס שעות מהזיכרון לפי חודש נבחר ───
   React.useEffect(() => {
     if (subTab !== 'payroll') return;
     const init = {};
@@ -38,12 +39,16 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
       };
     });
     setHoursLocal(init);
+  }, [subTab, payrollMonth, window.LAST_REFRESH]);
+  // ─── שכר/שעה: אכלוס רק בפתיחת הלשונית / החלפת חודש (לא ב-refresh) ───
+  React.useEffect(() => {
+    if (subTab !== 'payroll') return;
     const rInit = {};
     (window.EMPLOYEES || []).forEach((emp) => {
       rInit[emp.id] = emp.hourly_rate != null ? String(emp.hourly_rate) : '';
     });
     setRateLocal(rInit);
-  }, [subTab, payrollMonth, window.LAST_REFRESH]);
+  }, [subTab, payrollMonth]);
 
   // רשימת חודשים לבחירה — חודש נוכחי + 17 אחרונים מ-MONTHLY
   const payrollMonths = React.useMemo(() => {
@@ -71,11 +76,13 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
     };
     setSavingEmp(emp.id);
     try {
-      // שמירת שכר/שעה אם השתנה
       const newRate = Number(rateLocal[emp.id]) || 0;
       if (newRate !== (Number(emp.hourly_rate) || 0)) {
-        const { error: rErr } = await window.sb.from('employees').update({ hourly_rate: newRate, updated_at: new Date().toISOString() }).eq('id', emp.id);
+        const { data: rData, error: rErr } = await window.sb.from('employees')
+          .update({ hourly_rate: newRate, updated_at: new Date().toISOString() })
+          .eq('id', emp.id).select('hourly_rate').single();
         if (rErr) throw rErr;
+        if (!rData) throw new Error('העדכון לא נשמר — בדוק הרשאות בטבלת employees');
         emp.hourly_rate = newRate;
       }
       const { error } = await window.sb.from('employee_hours').upsert(payload, { onConflict: 'employee_id,month' });
@@ -90,8 +97,7 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
       (window.EMPLOYEES || []).forEach((e2) => {
         const h2 = window.EMPLOYEE_HOURS[`${e2.id}__${payrollMonth}`];
         if (!h2) return;
-        const e2WithRate = { ...e2, hourly_rate: Number(rateLocal[e2.id] ?? e2.hourly_rate) || 0 };
-        const p2 = window.calcPayroll(e2WithRate, h2);
+        const p2 = window.calcPayroll(empRate(e2), h2);
         grossSum += p2.total;
       });
       if (grossSum > 0) {
@@ -271,9 +277,7 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
         const rows = emps.map((emp) => {
           const local = hoursLocal[emp.id] || {};
           const h = { regular_hours: local.reg, extra_hours_125: local.e125, extra_hours_150: local.e150 };
-          const rateVal = rateLocal[emp.id] != null ? rateLocal[emp.id] : emp.hourly_rate;
-          const empWithRate = { ...emp, hourly_rate: Number(rateVal) || 0 };
-          const p = window.calcPayroll(empWithRate, h);
+          const p = window.calcPayroll(empRate(emp), h);
           return { emp, h, p, hasInput: (Number(local.reg)||0) + (Number(local.e125)||0) + (Number(local.e150)||0) > 0 };
         });
         const sumGross = rows.reduce((a, r) => a + r.p.gross, 0);
