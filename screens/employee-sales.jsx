@@ -10,6 +10,12 @@ const BUCKETS_CONFIG = [
   { key: '700_plus', label: '₪700+' },
 ];
 
+// מיפוי שמות עובדים מהקופה → שם מאוחד (אותה ביאנקה רשומה אחרת בכל סניף)
+const NAME_ALIAS = {
+  'ביאנקה לאונה': 'ביאנקה',
+};
+const canonName = (n) => NAME_ALIAS[n] || n;
+
 const EmployeeSales = ({ activeBranch = 'both' }) => {
   useLiveData();
   const [subTab, setSubTab] = useState('sales');   // 'sales' | 'payroll'
@@ -140,10 +146,10 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
       if (!stats || !stats.length) return;
       daysCount++;
       stats.forEach((emp) => {
-        // איסוף ראשוני — אגרגציה לכל העובדים, ואז סינון בהמשך
-        if (!empMap[emp.name]) {
-          empMap[emp.name] = {
-            name: emp.name,
+        const cname = canonName(emp.name);
+        if (!empMap[cname]) {
+          empMap[cname] = {
+            name: cname,
             branchSet: new Set(),
             total_receipts: 0,
             total_revenue: 0,
@@ -153,7 +159,7 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
             ),
           };
         }
-        const e = empMap[emp.name];
+        const e = empMap[cname];
         if (emp.branch) e.branchSet.add(emp.branch);
         e.total_receipts += emp.total_receipts || 0;
         e.total_revenue  += emp.total_revenue  || 0;
@@ -187,8 +193,8 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
     const rows = [];
     Object.entries(window.DAILY_DETAILS || {}).forEach(([date, dayData]) => {
       if (date < cutoffISO) return;
-      const emp = (dayData.cashier_stats || []).find((e) => e.name === selectedEmp);
-      if (emp) rows.push({ date, ...emp });
+      const emp = (dayData.cashier_stats || []).find((e) => canonName(e.name) === selectedEmp);
+      if (emp) rows.push({ date, ...emp, name: canonName(emp.name) });
     });
     return rows.sort((a, b) => b.date.localeCompare(a.date));
   }, [selectedEmp, cutoffISO, window.LAST_REFRESH]);
