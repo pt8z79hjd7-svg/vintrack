@@ -34,9 +34,8 @@ const ScannerModal = ({ onClose, onFound, onAdd }) => {
     return { product: p, code, usedParallel };
   }, []);
 
-  // הפעלת מצלמה
+  // הפעלת מצלמה — רץ פעם אחת ב-mount; cleanup רק ב-unmount
   useEffect(() => {
-    if (state !== 'init') return;
     if (!window.Html5Qrcode) {
       setErrMsg('ספריית הסריקה לא נטענה. נסה לרענן את הדף.');
       setState('error');
@@ -96,7 +95,7 @@ const ScannerModal = ({ onClose, onFound, onAdd }) => {
         scannerRef.current = null;
       }
     };
-  }, [state, findProduct]);
+  }, []);  // ⚠ אין תלות ב-state — אחרת cleanup עוצר מצלמה כשמשתנה ל-'scanning'
 
   // ניקוי בסגירה
   const handleClose = () => {
@@ -230,7 +229,10 @@ const ScannerModal = ({ onClose, onFound, onAdd }) => {
               })()}
               <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
                 ספק: {scanned.product.supplier}
-                {scanned.product.category && ` · ${scanned.product.category}`}
+                {(() => {
+                  const catLabel = (window.CATEGORIES || []).find(c => c.id === scanned.product.cat)?.label;
+                  return catLabel ? ` · ${catLabel}` : null;
+                })()}
               </div>
             </div>
           )}

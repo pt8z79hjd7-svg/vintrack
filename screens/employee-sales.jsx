@@ -70,7 +70,11 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
   };
 
   // ─── שמירת שעות עובד יחיד ─── + עדכון monthly_finance.salaries ───
+  const _savingRef = React.useRef(new Set());
   const savePayrollRow = async (emp) => {
+    // הגנת race — חוסם קליק כפול לפני ש-React מעדכן את savingEmp
+    if (_savingRef.current.has(emp.id)) return;
+    _savingRef.current.add(emp.id);
     const local = hoursLocal[emp.id] || {};
     const payload = {
       employee_id: emp.id,
@@ -120,9 +124,10 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
       (window.toast?.success || alert)(`✓ שעות ${emp.name} נשמרו`);
       setTimeout(() => window.refreshData && window.refreshData('payroll-save'), 400);
     } catch (e) {
-      (window.toast?.error || alert)('שגיאה: ' + e.message);
+      (window.toast?.error || alert)('שגיאה: ' + (e?.message || e || 'לא ידוע'));
     } finally {
       setSavingEmp(null);
+      _savingRef.current.delete(emp.id);
     }
   };
 

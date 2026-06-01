@@ -77,6 +77,19 @@ async function loadAllData() {
     sb.from('employee_hours').select('*'),     // שעות לפי חודש — graceful אם הטבלה חסרה
   ]);
 
+  // ─── אזהרה על טבלאות שנכשלו בטעינה (במקום silent || []) ───
+  const _failedTables = [];
+  [['monthly_summary', monR], ['daily_summary', dayR], ['daily_details', detR],
+   ['product_approvals', appR], ['promo_categories', pcatR], ['product_promos', ppromoR],
+   ['settings', setR], ['monthly_finance', finR], ['employees', empR], ['employee_hours', empHoursR],
+  ].forEach(([name, res]) => {
+    if (res && res.error) _failedTables.push(`${name}: ${res.error.message || res.error.code || 'unknown'}`);
+  });
+  if (_failedTables.length) {
+    console.warn('[VinTrack] טבלאות שנכשלו בטעינה:', _failedTables);
+    if (window.toast?.warn) window.toast.warn(`טעינה חלקית: ${_failedTables.length} טבלאות נכשלו (פתח קונסול)`, 5000);
+  }
+
   // ─── מבצעי לקוחות (סוגי מבצעים + שיוך לכל מוצר) ───
   const PROMO_CATEGORIES = (pcatR.data || []).map((c) => {
     const u = n(c.units), pt = n(c.price_total), up = u > 0 ? pt / u : 0;
@@ -537,32 +550,36 @@ function realtimeRefresh(table) {
   refreshData('realtime:' + table);
 }
 
+let _rtRetryTimer = null;
 function startRealtime() {
   try {
     if (!window.sb) return;
+    // ניקוי ערוץ קודם אם קיים — מונע דליפת ערוצים בריצות חוזרות
+    if (window._vtChannel) {
+      try { window._vtChannel.unsubscribe(); } catch (_) {}
+      window._vtChannel = null;
+    }
+    if (_rtRetryTimer) { clearTimeout(_rtRetryTimer); _rtRetryTimer = null; }
+
     const tables = ['products', 'daily_summary', 'monthly_summary', 'supplier_inventory',
                     'order_recommendations', 'transfers', 'import_deals'];
     const ch = window.sb.channel('vintrack-live');
     tables.forEach((t) => ch.on('postgres_changes', { event: '*', schema: 'public', table: t },
                                 () => realtimeRefresh(t)));
-    // sync trigger: כשה-worker מוחק את הבקשה מ-additional_income → סימן שסיים
     ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'additional_income' }, (payload) => {
       const row = payload?.old;
       if (row?.month === '__SYNC_REQUEST__') {
         console.log('[VinTrack] sync done by worker — refreshing');
         if (window.toast) window.toast.success('✓ דוח טרי הורד — מתעדכן…');
-        // המתנה קצרה לוודא ש-supabase_sync סיים לדחוף, ואז רענון
         setTimeout(() => refreshData('post-worker'), 1500);
       }
     });
     ch.subscribe((status) => {
       console.log('[VinTrack] realtime status:', status);
-      // אם הסתבכנו (CHANNEL_ERROR / TIMED_OUT) — נסה שוב אחרי 5 שניות
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        setTimeout(() => {
-          try { window._vtChannel?.unsubscribe(); } catch (_) {}
-          startRealtime();
-        }, 5000);
+        // רק timer אחד פעיל בכל זמן — לא יוצרים מקבילים
+        if (_rtRetryTimer) return;
+        _rtRetryTimer = setTimeout(() => { _rtRetryTimer = null; startRealtime(); }, 5000);
       }
     });
     window._vtChannel = ch;
