@@ -64,7 +64,7 @@ async function fetchAll(table, select = '*', opts = {}) {
 
 async function loadAllData() {
   const sb = window.sb;
-  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR, empR, empHoursR, genR] = await Promise.all([
+  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR, empR, empHoursR, genR, extR] = await Promise.all([
     fetchAll('products'),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
@@ -81,6 +81,7 @@ async function loadAllData() {
     sb.from('employees').select('*').eq('is_active', true).order('name'),  // עובדים פעילים — graceful אם הטבלה חסרה
     sb.from('employee_hours').select('*'),     // שעות לפי חודש — graceful אם הטבלה חסרה
     sb.from('generic_products').select('*').eq('is_active', true),  // פריטים כלליים (05) — graceful אם הטבלה חסרה
+    sb.from('external_clients').select('*').eq('is_active', true),   // לקוחות חיצוניים (וולט/תן ביס/פורטונה) — graceful אם הטבלה חסרה
   ]);
 
   // ─── אזהרה על טבלאות שנכשלו בטעינה (במקום silent || []) ───
@@ -97,6 +98,7 @@ async function loadAllData() {
   }
   // generic_products — טבלה אופציונלית/תוספתית: כשל (למשל טרם הורצה ה-SQL) נרשם לקונסול בלבד, ללא אזהרה מטרידה
   if (genR && genR.error) console.warn('[VinTrack] generic_products לא נטענה (אופציונלי):', genR.error.message || genR.error.code || 'unknown');
+  if (extR && extR.error) console.warn('[VinTrack] external_clients לא נטענה (אופציונלי):', extR.error.message || extR.error.code || 'unknown');
 
   // ─── מבצעי לקוחות (סוגי מבצעים + שיוך לכל מוצר) ───
   const PROMO_CATEGORIES = (pcatR.data || []).map((c) => {
@@ -208,6 +210,27 @@ async function loadAllData() {
       monthRevenue: g.month_revenue,
       monthProfit: g.month_profit,
     });
+  });
+
+  // ─── לקוחות חיצוניים (וולט / תן ביס / פורטונה) — זיהוי לפי "לקוח_ספק", הפרדה מ-KPI ───
+  // match_terms מנורמלים מראש ל-window.matchExternal. סטטיסטיקות נכתבות ע"י הצינור (PATCH).
+  const EXTERNAL_CLIENTS = (extR && extR.data ? extR.data : []).map((c) => {
+    let terms = c.match_terms || [];
+    if (typeof terms === 'string') { try { terms = JSON.parse(terms); } catch { terms = []; } }
+    if (!Array.isArray(terms)) terms = [];
+    const _normTerms = terms.map((t) => _normGeneric(t)).filter(Boolean);
+    return {
+      id: c.id, name: c.name, match_terms: terms, _normTerms,
+      kind: c.kind || 'delivery',
+      commission_pct: n(c.commission_pct),
+      pays_at_cost: !!c.pays_at_cost,
+      open_account: !!c.open_account,
+      payment_terms: c.payment_terms || '',
+      is_active: c.is_active !== false,
+      month_qty: n(c.month_qty), month_retail_incl: n(c.month_retail_incl),
+      month_cost: n(c.month_cost), month_expected_net: n(c.month_expected_net),
+      updated_at: c.updated_at || '',
+    };
   });
 
   // קטגוריות (לפי הקיימות בפועל)
@@ -451,7 +474,7 @@ async function loadAllData() {
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH, INVENTORY_VALUE_TOTAL,
     DAILY_DETAILS, APPROVED_PRODUCTS,
     PROMO_CATEGORIES, PROMO_BY_BARCODE, SETTINGS, FINANCE,
-    EMPLOYEES, EMPLOYEE_HOURS, GENERIC_PRODUCTS,
+    EMPLOYEES, EMPLOYEE_HOURS, GENERIC_PRODUCTS, EXTERNAL_CLIENTS,
     BARCODE_ALIAS: _barcodeAlias,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
     LAST_REFRESH: Date.now(),
@@ -527,6 +550,22 @@ window.matchGeneric = function (name) {
   for (const g of reg) {
     for (const nt of (g._normTerms || [])) {
       if (nt && nn.includes(nt) && nt.length > bestLen) { best = g; bestLen = nt.length; }
+    }
+  }
+  return best;
+};
+
+// ─── התאמת לקוח חיצוני לפי שם (חייב להישאר מסונכרן עם external_match.match_external ב-Python) ───
+// אין מושג "קירור" כאן — מתאים על שם הלקוח/ספק, ה-term הארוך ביותר שהוא substring מנצח.
+window.matchExternal = function (customer) {
+  const reg = window.EXTERNAL_CLIENTS || [];
+  if (!reg.length || !customer) return null;
+  const nn = _normGeneric(customer);
+  if (!nn) return null;
+  let best = null, bestLen = 0;
+  for (const c of reg) {
+    for (const nt of (c._normTerms || [])) {
+      if (nt && nn.includes(nt) && nt.length > bestLen) { best = c; bestLen = nt.length; }
     }
   }
   return best;

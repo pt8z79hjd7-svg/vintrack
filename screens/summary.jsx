@@ -180,7 +180,8 @@ const DailyExpanded = ({ date, hasData }) => {
   const { top_sellers = [], generic_05 = [], club_discounts = [], price_anomalies = [],
     new_products = [], promo_stats = {}, incoming_purchases = [], incoming_transfers = [],
     purchase_count = 0, transfer_count = 0,
-    returns = [], returns_count = 0, returns_net_total = 0 } = det;
+    returns = [], returns_count = 0, returns_net_total = 0,
+    external_clients = [] } = det;
   const promoEntries = Object.entries(promo_stats).filter(([, v]) => v > 0);
 
   return (
@@ -562,10 +563,51 @@ const DailyExpanded = ({ date, hasData }) => {
         </Card>
       )}
 
+      {/* 📦 לקוחות חיצוניים (וולט / תן ביס / פורטונה) — מופרד מ-KPI החנות */}
+      {external_clients.length > 0 && (
+        <Card title="📦 לקוחות חיצוניים" sub={`${external_clients.length} ערוצים · לא נכלל במחזור החנות`}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>לקוח</th>
+                  <th style={{ textAlign: 'end' }}>יח׳</th>
+                  <th style={{ textAlign: 'end' }}>שווי קמעונאי ({_vatLbl()})</th>
+                  <th style={{ textAlign: 'end' }}>עלות סחורה</th>
+                  <th style={{ textAlign: 'end' }}>צפי כניסה</th>
+                </tr>
+              </thead>
+              <tbody>
+                {external_clients.map((ec, i) => {
+                  const isRel = ec.kind === 'related' || ec.pays_at_cost;
+                  return (
+                    <tr key={i}>
+                      <td style={{ fontWeight: 500 }}>
+                        {ec.name}
+                        <span style={{ marginInlineStart: 6, fontSize: 11, padding: '1px 6px', borderRadius: 6,
+                          background: isRel ? 'var(--warn-bg, #fef3c7)' : 'var(--accent-bg, #e0f2fe)',
+                          color: isRel ? 'var(--warn, #b45309)' : 'var(--accent, #0369a1)' }}>
+                          {isRel ? 'עלות' : `עמלה ${Math.round(ec.commission_pct || 0)}%`}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>{ec.qty}</td>
+                      <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(ec.retail_incl || 0).toLocaleString('he-IL')}</td>
+                      <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', color: 'var(--ink-2)' }}>₪{Math.round(ec.cost_excl || 0).toLocaleString('he-IL')}</td>
+                      <td style={{ textAlign: 'end', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(ec.expected_net || 0).toLocaleString('he-IL')}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       {/* אם הכל ריק */}
       {top_sellers.length === 0 && generic_05.length === 0 && club_discounts.length === 0
         && price_anomalies.length === 0 && new_products.length === 0 && promoEntries.length === 0
-        && incoming_purchases.length === 0 && incoming_transfers.length === 0 && (
+        && incoming_purchases.length === 0 && incoming_transfers.length === 0
+        && external_clients.length === 0 && (
         <Card>
           <div style={{ padding: 24, textAlign: 'center', color: 'var(--ok)', fontSize: 14, fontWeight: 600 }}>
             ✅ אין חריגות או אירועים מיוחדים היום

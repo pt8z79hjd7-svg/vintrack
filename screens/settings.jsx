@@ -389,6 +389,64 @@ const Settings = ({ activeBranch = 'both' }) => {
     if (typeof window !== 'undefined') window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   };
 
+  // ─── ניהול לקוחות חיצוניים (וולט / תן ביס / פורטונה) ───
+  const externalClients = window.EXTERNAL_CLIENTS || [];
+  const EXT_KINDS = [{ v: 'delivery', l: 'משלוחים (וולט/תן ביס)' }, { v: 'related', l: 'חברה קשורה (עלות)' }];
+  const _BLANK_EXT = { name: '', match_terms: [], kind: 'delivery', commission_pct: '', pays_at_cost: false, open_account: false, payment_terms: '' };
+  const [editingExtId, setEditingExtId] = useState(null);
+  const [extForm, setExtForm] = useState(_BLANK_EXT);
+  const [extTermInput, setExtTermInput] = useState('');
+  const [extBusy, setExtBusy] = useState(false);
+
+  const resetExtForm = () => { setEditingExtId(null); setExtForm(_BLANK_EXT); setExtTermInput(''); };
+  const startEditExt = (c) => {
+    setEditingExtId(c.id);
+    setExtForm({
+      name: c.name || '', match_terms: Array.isArray(c.match_terms) ? c.match_terms.slice() : [],
+      kind: c.kind || 'delivery', commission_pct: c.commission_pct ?? '',
+      pays_at_cost: !!c.pays_at_cost, open_account: !!c.open_account, payment_terms: c.payment_terms || '',
+    });
+    setExtTermInput('');
+  };
+  const addExtTerm = () => {
+    const t = extTermInput.trim();
+    if (!t) return;
+    setExtForm(v => v.match_terms.includes(t) ? v : { ...v, match_terms: [...v.match_terms, t] });
+    setExtTermInput('');
+  };
+  const removeExtTerm = (t) => setExtForm(v => ({ ...v, match_terms: v.match_terms.filter(x => x !== t) }));
+  const saveExt = async () => {
+    if (!extForm.name?.trim()) { (window.toast?.warn || alert)('הזן שם לקוח'); return; }
+    if (!extForm.match_terms.length) { (window.toast?.warn || alert)('הוסף לפחות מילת זיהוי אחת'); return; }
+    setExtBusy(true);
+    const isRel = extForm.kind === 'related';
+    const payload = {
+      name: extForm.name.trim(),
+      match_terms: extForm.match_terms,
+      kind: extForm.kind,
+      commission_pct: isRel ? 0 : (Number(extForm.commission_pct) || 0),
+      pays_at_cost: isRel ? true : !!extForm.pays_at_cost,
+      open_account: !!extForm.open_account,
+      payment_terms: (extForm.payment_terms || '').trim(),
+      updated_at: new Date().toISOString(),
+    };
+    let error;
+    if (editingExtId) ({ error } = await window.sb.from('external_clients').update(payload).eq('id', editingExtId));
+    else ({ error } = await window.sb.from('external_clients').insert(payload));
+    setExtBusy(false);
+    if (error) { (window.toast?.error || alert)('שמירה נכשלה: ' + error.message); return; }
+    (window.toast?.success || alert)(editingExtId ? '✓ לקוח עודכן' : '✓ לקוח נוסף');
+    resetExtForm();
+    setTimeout(() => window.refreshData && window.refreshData('external-save'), 400);
+  };
+  const toggleExtActive = async (c) => {
+    setExtBusy(true);
+    const { error } = await window.sb.from('external_clients').update({ is_active: !c.is_active }).eq('id', c.id);
+    setExtBusy(false);
+    if (error) { (window.toast?.error || alert)('שגיאה: ' + error.message); return; }
+    setTimeout(() => window.refreshData && window.refreshData('external-toggle'), 400);
+  };
+
   return (
     <div className="page">
       <div className="between">
@@ -922,6 +980,139 @@ const Settings = ({ activeBranch = 'both' }) => {
               </div>
             </div>
           )}
+        </div>
+      </Card>
+
+      {/* ניהול לקוחות חיצוניים (וולט / תן ביס / פורטונה) */}
+      <Card title="📦 לקוחות חיצוניים" sub="וולט / תן ביס / פורטונה — זיהוי לפי שם הלקוח בקופה → הפרדה ממחזור החנות + מעקב צפי כניסה">
+        <div style={{ padding: 18 }}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>לקוח</th>
+                  <th>סוג</th>
+                  <th>מילות זיהוי</th>
+                  <th style={{ textAlign: 'center' }}>עמלה / תנאי</th>
+                  <th style={{ textAlign: 'end' }}>חודש: יח׳ · שווי · צפי</th>
+                  <th style={{ textAlign: 'center' }}>פעיל</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {externalClients.length ? externalClients.map(c => {
+                  const isRel = c.kind === 'related' || c.pays_at_cost;
+                  return (
+                    <tr key={c.id} style={editingExtId === c.id ? { background: 'var(--accent-soft)' } : {}}>
+                      <td style={{ fontWeight: 600 }}>{c.name}</td>
+                      <td><span className="muted" style={{ fontSize: 12 }}>{isRel ? 'חברה קשורה' : 'משלוחים'}</span></td>
+                      <td>
+                        <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                          {(c.match_terms || []).map(t => (
+                            <span key={t} className="badge" style={{ fontSize: 11 }}>{t}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center', fontSize: 12 }}>
+                        {isRel ? <span>עלות{c.payment_terms ? ` · ${c.payment_terms}` : ''}</span>
+                               : <span>עמלה {Math.round(c.commission_pct || 0)}%</span>}
+                        {c.open_account && <span className="badge" style={{ marginInlineStart: 4, fontSize: 10 }}>חשבון פתוח</span>}
+                      </td>
+                      <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
+                        {Number(c.month_qty || 0)} · ₪{Math.round(c.month_retail_incl || 0).toLocaleString('he-IL')} · <b style={{ color: 'var(--success, #0a7a55)' }}>₪{Math.round(c.month_expected_net || 0).toLocaleString('he-IL')}</b>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`badge ${c.is_active ? 'ok' : ''}`}>{c.is_active ? 'כן' : 'לא'}</span>
+                      </td>
+                      <td style={{ textAlign: 'end' }}>
+                        <button className="btn btn-sm btn-ghost" onClick={() => startEditExt(c)} disabled={extBusy}>ערוך</button>
+                        <button className="btn btn-sm btn-ghost" onClick={() => toggleExtActive(c)} disabled={extBusy}
+                                style={{ color: c.is_active ? 'var(--danger)' : 'var(--ok)' }}>
+                          {c.is_active ? 'השבת' : 'הפעל'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }) : <tr><td colSpan="7" style={{ textAlign: 'center', padding: 20, color: 'var(--ink-3)' }}>אין לקוחות חיצוניים — הוסף למטה (או הרץ את ה-SQL)</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
+          {/* טופס הוספה/עריכה */}
+          <div style={{ marginTop: 16, padding: 14, background: 'var(--surface-2, rgba(0,0,0,0.03))', borderRadius: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>
+              {editingExtId ? '✏ עריכת לקוח חיצוני' : '+ לקוח חיצוני חדש'}
+            </div>
+            <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>שם לקוח *</div>
+                <input className="input" value={extForm.name}
+                       onChange={e => setExtForm(v => ({ ...v, name: e.target.value }))}
+                       style={{ width: 170, padding: '6px 8px' }} />
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>סוג</div>
+                <select className="input" value={extForm.kind}
+                        onChange={e => setExtForm(v => ({ ...v, kind: e.target.value }))}
+                        style={{ width: 180, padding: '6px 8px' }}>
+                  {EXT_KINDS.map(k => <option key={k.v} value={k.v}>{k.l}</option>)}
+                </select>
+              </div>
+              {extForm.kind === 'delivery' && (
+                <div>
+                  <div className="muted" style={{ fontSize: 11 }}>עמלה %</div>
+                  <input className="input" type="number" step="0.5" value={extForm.commission_pct}
+                         onChange={e => setExtForm(v => ({ ...v, commission_pct: e.target.value }))}
+                         style={{ width: 80, padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }} />
+                </div>
+              )}
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>תנאי תשלום</div>
+                <input className="input" value={extForm.payment_terms}
+                       onChange={e => setExtForm(v => ({ ...v, payment_terms: e.target.value }))}
+                       placeholder="סוף חודש / שוטף 30"
+                       style={{ width: 130, padding: '6px 8px' }} />
+              </div>
+              <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center', padding: '6px 0' }}>
+                <input type="checkbox" checked={!!extForm.open_account}
+                       onChange={e => setExtForm(v => ({ ...v, open_account: e.target.checked }))} />
+                <span style={{ fontSize: 12 }}>חשבון פתוח (חוב מצטבר)</span>
+              </label>
+            </div>
+
+            {/* מילות זיהוי (chips) */}
+            <div style={{ marginTop: 12 }}>
+              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>מילות זיהוי * (substring על שם הלקוח בקופה — הכי-ספציפי מנצח)</div>
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                {extForm.match_terms.map(t => (
+                  <span key={t} className="badge ok" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {t}
+                    <span onClick={() => removeExtTerm(t)} style={{ cursor: 'pointer', fontWeight: 700 }}>×</span>
+                  </span>
+                ))}
+                <input className="input" value={extTermInput}
+                       onChange={e => setExtTermInput(e.target.value)}
+                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addExtTerm(); } }}
+                       placeholder="הקלד + Enter"
+                       style={{ width: 140, padding: '6px 8px' }} />
+                <button className="btn btn-sm btn-ghost" onClick={addExtTerm}>+ הוסף מילה</button>
+              </div>
+            </div>
+
+            <div className="row" style={{ gap: 10, marginTop: 14, alignItems: 'center' }}>
+              <button className="btn btn-primary" onClick={saveExt} disabled={extBusy}>
+                {extBusy ? '...שומר' : (editingExtId ? 'עדכן' : 'הוסף')}
+              </button>
+              {editingExtId && (
+                <button className="btn btn-ghost" onClick={resetExtForm} disabled={extBusy}>ביטול</button>
+              )}
+            </div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 12, lineHeight: 1.5 }}>
+              <b>משלוחים</b> (וולט/תן ביס): נמכר במחיר 0 בקופה → השווי מחושב לפי מחיר החנות, והצפי = שווי × (1−עמלה).
+              <br /><b>חברה קשורה</b> (פורטונה): משלמת במחיר עלות → הצפי = עלות הסחורה. הזיהוי לפי שם הלקוח בקופה, והשורות מוחרגות ממחזור החנות.
+              <br />הסטטיסטיקות (חודש) נכתבות אוטומטית בהרצת הצינור הבאה.
+            </div>
+          </div>
         </div>
       </Card>
 
