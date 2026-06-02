@@ -291,6 +291,104 @@ const Settings = ({ activeBranch = 'both' }) => {
     setTimeout(() => window.refreshData && window.refreshData('emp-toggle'), 400);
   };
 
+  // ─── ניהול פריטים כלליים (ברקוד 05) ───
+  const genericProducts = window.GENERIC_PRODUCTS || [];
+  const GEN_CATS = ['אביזרי יין', 'סיגרים', 'כוסות', 'אוכל', 'שירותים', 'אחר'];
+  const _BLANK_GEN = { name: '', category: 'אביזרי יין', match_terms: [], cost: '', costInclVat: false, supplier: '', track_stock: false, stock_mikado: '', stock_kohav: '' };
+  const [editingGenId, setEditingGenId] = useState(null);   // null = מצב חדש
+  const [genForm, setGenForm] = useState(_BLANK_GEN);
+  const [genTermInput, setGenTermInput] = useState('');
+  const [genBusy, setGenBusy] = useState(false);
+
+  const resetGenForm = () => { setEditingGenId(null); setGenForm(_BLANK_GEN); setGenTermInput(''); };
+
+  const startEditGen = (g) => {
+    setEditingGenId(g.id);
+    setGenForm({
+      name: g.name || '', category: g.category || 'אחר',
+      match_terms: Array.isArray(g.match_terms) ? g.match_terms.slice() : [],
+      cost: g.cost ?? '', costInclVat: false,   // עלות מאוחסנת ללא מע״מ — עורכים תמיד ללא מע״מ
+      supplier: g.supplier || '', track_stock: !!g.track_stock,
+      stock_mikado: g.stock_mikado ?? '', stock_kohav: g.stock_kohav ?? '',
+    });
+    setGenTermInput('');
+  };
+
+  const addGenTerm = () => {
+    const t = genTermInput.trim();
+    if (!t) return;
+    setGenForm(v => v.match_terms.includes(t) ? v : { ...v, match_terms: [...v.match_terms, t] });
+    setGenTermInput('');
+  };
+  const removeGenTerm = (t) => setGenForm(v => ({ ...v, match_terms: v.match_terms.filter(x => x !== t) }));
+
+  const saveGen = async () => {
+    if (!genForm.name?.trim()) { (window.toast?.warn || alert)('הזן שם פריט'); return; }
+    if (!genForm.match_terms.length) { (window.toast?.warn || alert)('הוסף לפחות מילת זיהוי אחת'); return; }
+    setGenBusy(true);
+    let cost = Number(genForm.cost) || 0;
+    if (genForm.costInclVat) cost = cost / 1.18;   // המרה לקנוני (ללא מע״מ)
+    const payload = {
+      name: genForm.name.trim(),
+      category: genForm.category || 'אחר',
+      match_terms: genForm.match_terms,
+      cost: Math.round(cost * 100) / 100,
+      supplier: (genForm.supplier || '').trim(),
+      track_stock: !!genForm.track_stock,
+      stock_mikado: genForm.track_stock ? (Number(genForm.stock_mikado) || 0) : 0,
+      stock_kohav: genForm.track_stock ? (Number(genForm.stock_kohav) || 0) : 0,
+      updated_at: new Date().toISOString(),
+    };
+    let error;
+    if (editingGenId) {
+      ({ error } = await window.sb.from('generic_products').update(payload).eq('id', editingGenId));
+    } else {
+      ({ error } = await window.sb.from('generic_products').insert(payload));
+    }
+    setGenBusy(false);
+    if (error) { (window.toast?.error || alert)('שמירה נכשלה: ' + error.message); return; }
+    (window.toast?.success || alert)(editingGenId ? '✓ פריט עודכן' : '✓ פריט נוסף');
+    resetGenForm();
+    setTimeout(() => window.refreshData && window.refreshData('generic-save'), 400);
+  };
+
+  const toggleGenActive = async (g) => {
+    setGenBusy(true);
+    const { error } = await window.sb.from('generic_products').update({ is_active: !g.is_active }).eq('id', g.id);
+    setGenBusy(false);
+    if (error) { (window.toast?.error || alert)('שגיאה: ' + error.message); return; }
+    setTimeout(() => window.refreshData && window.refreshData('generic-toggle'), 400);
+  };
+
+  // גילוי פריטי 05 לא-מזוהים (לא מותאמים, לא קירור) — מתוך הפירוט היומי
+  const _GEN_COOLING = ['קירור', 'קר', 'מקרר', 'קרה', 'קרר'];
+  const unmatchedGeneric = React.useMemo(() => {
+    const dd = window.DAILY_DETAILS || {};
+    const seen = {};
+    Object.values(dd).forEach(day => {
+      (day.generic_05 || []).forEach(rec => {
+        (rec.items || []).forEach(it => {
+          if (!it.is_generic) return;
+          const nm = String(it.name || '').trim();
+          if (!nm) return;
+          if (nm.split(/[\s,\-]+/).some(w => _GEN_COOLING.includes(w))) return;   // קירור — 100% רווח
+          if (window.matchGeneric && window.matchGeneric(nm)) return;             // כבר מותאם
+          if (!seen[nm]) seen[nm] = { name: nm, qty: 0, revenue: 0 };
+          seen[nm].qty += Number(it.qty) || 0;
+          seen[nm].revenue += Number(it.total) || 0;
+        });
+      });
+    });
+    return Object.values(seen).sort((a, b) => b.revenue - a.revenue);
+  }, [window.LAST_REFRESH, genericProducts.length]);
+
+  const prefillGen = (name) => {
+    setEditingGenId(null);
+    setGenForm({ ...(_BLANK_GEN), name, match_terms: [name] });
+    setGenTermInput('');
+    if (typeof window !== 'undefined') window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+  };
+
   return (
     <div className="page">
       <div className="between">
@@ -649,6 +747,181 @@ const Settings = ({ activeBranch = 'both' }) => {
               <br />ביטוח לאומי מעסיק מחושב אוטומטית במדרגות (3.55% עד ₪7,522 · 7.6% מעל) במסך השכר.
             </div>
           </div>
+        </div>
+      </Card>
+
+      {/* ניהול פריטים כלליים (ברקוד 05) */}
+      <Card title="🧩 פריטים כלליים (ללא ברקוד)" sub="פריטי 05 — התאמת עלות לפי שם → רווח אמיתי בדוחות + הופעה כמוצרים">
+        <div style={{ padding: 18 }}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>שם</th>
+                  <th>קטגוריה</th>
+                  <th>מילות זיהוי</th>
+                  <th style={{ textAlign: 'end' }}>עלות (ללא מע״מ)</th>
+                  <th>ספק</th>
+                  <th style={{ textAlign: 'center' }}>מלאי</th>
+                  <th style={{ textAlign: 'end' }}>חודש: יח׳ · הכנסה · רווח</th>
+                  <th style={{ textAlign: 'center' }}>פעיל</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {genericProducts.length ? genericProducts.map(g => (
+                  <tr key={g.id} style={editingGenId === g.id ? { background: 'var(--accent-soft)' } : {}}>
+                    <td style={{ fontWeight: 600 }}>{g.name}</td>
+                    <td><span className="muted" style={{ fontSize: 12 }}>{g.category}</span></td>
+                    <td>
+                      <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                        {(g.match_terms || []).map(t => (
+                          <span key={t} className="badge" style={{ fontSize: 11 }}>{t}</span>
+                        ))}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Number(g.cost || 0).toFixed(2)}</td>
+                    <td>{g.supplier || <span className="muted">—</span>}</td>
+                    <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
+                      {g.track_stock ? (Number(g.stock_mikado || 0) + Number(g.stock_kohav || 0)) : <span className="muted">—</span>}
+                    </td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
+                      {Number(g.month_qty || 0)} · ₪{Math.round(g.month_revenue || 0).toLocaleString('he-IL')} · <b style={{ color: 'var(--success, #0a7a55)' }}>₪{Math.round(g.month_profit || 0).toLocaleString('he-IL')}</b>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span className={`badge ${g.is_active ? 'ok' : ''}`}>{g.is_active ? 'כן' : 'לא'}</span>
+                    </td>
+                    <td style={{ textAlign: 'end' }}>
+                      <button className="btn btn-sm btn-ghost" onClick={() => startEditGen(g)} disabled={genBusy}>ערוך</button>
+                      <button className="btn btn-sm btn-ghost" onClick={() => toggleGenActive(g)} disabled={genBusy}
+                              style={{ color: g.is_active ? 'var(--danger)' : 'var(--ok)' }}>
+                        {g.is_active ? 'השבת' : 'הפעל'}
+                      </button>
+                    </td>
+                  </tr>
+                )) : <tr><td colSpan="9" style={{ textAlign: 'center', padding: 20, color: 'var(--ink-3)' }}>אין פריטים כלליים — הוסף למטה</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
+          {/* טופס הוספה/עריכה */}
+          <div style={{ marginTop: 16, padding: 14, background: 'var(--surface-2, rgba(0,0,0,0.03))', borderRadius: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>
+              {editingGenId ? '✏ עריכת פריט כללי' : '+ פריט כללי חדש'}
+            </div>
+            <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>שם פריט *</div>
+                <input className="input" value={genForm.name}
+                       onChange={e => setGenForm(v => ({ ...v, name: e.target.value }))}
+                       style={{ width: 150, padding: '6px 8px' }} />
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>קטגוריה</div>
+                <select className="input" value={genForm.category}
+                        onChange={e => setGenForm(v => ({ ...v, category: e.target.value }))}
+                        style={{ width: 120, padding: '6px 8px' }}>
+                  {GEN_CATS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>עלות ₪</div>
+                <input className="input" type="number" step="0.01" value={genForm.cost}
+                       onChange={e => setGenForm(v => ({ ...v, cost: e.target.value }))}
+                       style={{ width: 90, padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }} />
+              </div>
+              <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center', padding: '6px 0' }}>
+                <input type="checkbox" checked={!!genForm.costInclVat}
+                       onChange={e => setGenForm(v => ({ ...v, costInclVat: e.target.checked }))} />
+                <span style={{ fontSize: 12 }}>המחיר כולל מע״מ (÷1.18)</span>
+              </label>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>ספק</div>
+                <input className="input" value={genForm.supplier}
+                       onChange={e => setGenForm(v => ({ ...v, supplier: e.target.value }))}
+                       style={{ width: 120, padding: '6px 8px' }} />
+              </div>
+            </div>
+
+            {/* מילות זיהוי (chips) */}
+            <div style={{ marginTop: 12 }}>
+              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>מילות זיהוי * (substring על שם מנורמל — הכי-ספציפי מנצח)</div>
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                {genForm.match_terms.map(t => (
+                  <span key={t} className="badge ok" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {t}
+                    <span onClick={() => removeGenTerm(t)} style={{ cursor: 'pointer', fontWeight: 700 }}>×</span>
+                  </span>
+                ))}
+                <input className="input" value={genTermInput}
+                       onChange={e => setGenTermInput(e.target.value)}
+                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addGenTerm(); } }}
+                       placeholder="הקלד + Enter"
+                       style={{ width: 140, padding: '6px 8px' }} />
+                <button className="btn btn-sm btn-ghost" onClick={addGenTerm}>+ הוסף מילה</button>
+              </div>
+            </div>
+
+            {/* מעקב מלאי */}
+            <div style={{ marginTop: 12 }}>
+              <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center' }}>
+                <input type="checkbox" checked={!!genForm.track_stock}
+                       onChange={e => setGenForm(v => ({ ...v, track_stock: e.target.checked }))} />
+                <span style={{ fontSize: 12 }}>עקוב מלאי (פריט פיזי)</span>
+              </label>
+              {genForm.track_stock && (
+                <div className="row" style={{ gap: 10, marginTop: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div>
+                    <div className="muted" style={{ fontSize: 11 }}>מלאי מיקדו</div>
+                    <input className="input" type="number" value={genForm.stock_mikado}
+                           onChange={e => setGenForm(v => ({ ...v, stock_mikado: e.target.value }))}
+                           style={{ width: 90, padding: '6px 8px' }} />
+                  </div>
+                  <div>
+                    <div className="muted" style={{ fontSize: 11 }}>מלאי כוכב הצפון</div>
+                    <input className="input" type="number" value={genForm.stock_kohav}
+                           onChange={e => setGenForm(v => ({ ...v, stock_kohav: e.target.value }))}
+                           style={{ width: 90, padding: '6px 8px' }} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="row" style={{ gap: 10, marginTop: 14, alignItems: 'center' }}>
+              <button className="btn btn-primary" onClick={saveGen} disabled={genBusy}>
+                {genBusy ? '...שומר' : (editingGenId ? 'עדכן' : 'הוסף')}
+              </button>
+              {editingGenId && (
+                <button className="btn btn-ghost" onClick={resetGenForm} disabled={genBusy}>ביטול</button>
+              )}
+            </div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 12, lineHeight: 1.5 }}>
+              העלות נשמרת תמיד <b>ללא מע״מ</b> (קנוני). מילות הקירור (קר/קירור/מקרר) אינן מותאמות — נשמרות 100% רווח.
+              <br />הרווח האמיתי יחושב בדוח היומי/חודשי בהרצת הצינור הבאה; הסטטיסטיקות (חודש) נכתבות אוטומטית.
+            </div>
+          </div>
+
+          {/* גילוי פריטי 05 לא-מזוהים */}
+          {unmatchedGeneric.length > 0 && (
+            <div style={{ marginTop: 16, padding: 14, background: 'var(--warn-soft, rgba(220,150,0,0.08))', borderRadius: 10 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>
+                ❓ פריטי 05 ללא עלות ({unmatchedGeneric.length})
+              </div>
+              <div className="muted" style={{ fontSize: 11, marginBottom: 10, lineHeight: 1.5 }}>
+                שמות שנמכרו תחת 05, אינם מותאמים ואינם קירור — כרגע נספרים כ-100% רווח. לחץ להוספת עלות.
+                <br />(כאן עשויים להופיע גם יינות/בירות שתויגו בטעות ב-05 — אלו דורשים סריקת ברקוד אמיתי, לא הוספה כאן.)
+              </div>
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                {unmatchedGeneric.slice(0, 40).map(u => (
+                  <button key={u.name} className="btn btn-sm btn-ghost"
+                          onClick={() => prefillGen(u.name)}
+                          style={{ border: '1px dashed var(--border, #ccc)' }}>
+                    ➕ {u.name} <span className="muted" style={{ fontSize: 10 }}>({u.qty} יח׳)</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </Card>
 

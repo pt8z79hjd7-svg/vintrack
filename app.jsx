@@ -124,6 +124,8 @@ function App() {
     setTab(id);
     if (id !== 'orders') setActiveSupplier(null);
   };
+  // ניווט גלובלי — לרכיבים עמוקים שלא מקבלים onNav (למשל DailyExpanded → הגדרות)
+  useEffect(() => { window.vintrackNav = handleNav; }, []);
   const handleOpen = (kind, product) => setModal({ kind, product });
   const closeModal = () => setModal(null);
 

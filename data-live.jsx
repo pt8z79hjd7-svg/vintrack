@@ -11,6 +11,11 @@ const HEB_MON = { '01':'ינו','02':'פבר','03':'מרץ','04':'אפר','05':'
 const mlabel = (m) => { const [y, mo] = String(m || '').split('-'); return `${HEB_MON[mo] || mo} ${y || ''}`.trim(); };
 const n = (x) => Number(x) || 0;
 
+// ─── נרמול עברי לפריטים כלליים (05) — זהה ל-norm_he ב-generic_match.py ───
+// lowercase, הסרת ו/י, הסרת כל רווח. חייב להישאר מסונכרן עם צד ה-Python.
+const _normGeneric = (s) => String(s || '').toLowerCase().replace(/[וי]/g, '').replace(/\s+/g, '');
+const _COOLING_WORDS = ['קירור', 'קר', 'מקרר', 'קרה', 'קרר'];
+
 // ─── זיהוי גודל אריזה לבירות מתוך שם המוצר ───
 const detectPackSize = (name) => {
   const s = String(name || '');
@@ -35,7 +40,7 @@ Object.assign(window, {
   PROMO_CATEGORIES: [], PROMO_BY_BARCODE: {},
   SETTINGS: { profitTarget: 25, defaultMin: 3, categoryMin: {}, showInclVat: true },
   FINANCE: { byMonth: {}, current: { totalExpense: 0, totalIncome: 0, grossProfit: 0, revenue: 0, netProfit: 0, netMargin: 0 } },
-  EMPLOYEES: [], EMPLOYEE_HOURS: {},
+  EMPLOYEES: [], EMPLOYEE_HOURS: {}, GENERIC_PRODUCTS: [],
   BARCODE_ALIAS: {},
 });
 
@@ -59,7 +64,7 @@ async function fetchAll(table, select = '*', opts = {}) {
 
 async function loadAllData() {
   const sb = window.sb;
-  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR, empR, empHoursR] = await Promise.all([
+  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR, empR, empHoursR, genR] = await Promise.all([
     fetchAll('products'),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
@@ -75,6 +80,7 @@ async function loadAllData() {
     sb.from('monthly_finance').select('*'),    // הוצאות + הכנסות חוץ-קופה — graceful אם הטבלה חסרה
     sb.from('employees').select('*').eq('is_active', true).order('name'),  // עובדים פעילים — graceful אם הטבלה חסרה
     sb.from('employee_hours').select('*'),     // שעות לפי חודש — graceful אם הטבלה חסרה
+    sb.from('generic_products').select('*').eq('is_active', true),  // פריטים כלליים (05) — graceful אם הטבלה חסרה
   ]);
 
   // ─── אזהרה על טבלאות שנכשלו בטעינה (במקום silent || []) ───
@@ -89,6 +95,8 @@ async function loadAllData() {
     console.warn('[VinTrack] טבלאות שנכשלו בטעינה:', _failedTables);
     if (window.toast?.warn) window.toast.warn(`טעינה חלקית: ${_failedTables.length} טבלאות נכשלו (פתח קונסול)`, 5000);
   }
+  // generic_products — טבלה אופציונלית/תוספתית: כשל (למשל טרם הורצה ה-SQL) נרשם לקונסול בלבד, ללא אזהרה מטרידה
+  if (genR && genR.error) console.warn('[VinTrack] generic_products לא נטענה (אופציונלי):', genR.error.message || genR.error.code || 'unknown');
 
   // ─── מבצעי לקוחות (סוגי מבצעים + שיוך לכל מוצר) ───
   const PROMO_CATEGORIES = (pcatR.data || []).map((c) => {
@@ -143,6 +151,61 @@ async function loadAllData() {
       units_per_pack: _pack.units,
       pack_label: _pack.label,
     };
+  });
+
+  // ─── פריטים כלליים (ברקוד 05) — מרשם + סינתזה למוצרים ───
+  // match_terms מנורמלים מראש כדי ש-window.matchGeneric יהיה זול. עלות מנוהלת מהאפליקציה.
+  const GENERIC_PRODUCTS = (genR && genR.data ? genR.data : []).map((g) => {
+    let terms = g.match_terms || [];
+    if (typeof terms === 'string') { try { terms = JSON.parse(terms); } catch { terms = []; } }
+    if (!Array.isArray(terms)) terms = [];
+    const _normTerms = terms.map((t) => _normGeneric(t)).filter(Boolean);
+    return {
+      id: g.id, name: g.name, category: g.category || 'אחר',
+      match_terms: terms, _normTerms,
+      cost: n(g.cost), supplier: g.supplier || '',
+      track_stock: !!g.track_stock,
+      stock_mikado: n(g.stock_mikado), stock_kohav: n(g.stock_kohav),
+      is_active: g.is_active !== false,
+      weekly_qty: n(g.weekly_qty), month_qty: n(g.month_qty),
+      month_revenue: n(g.month_revenue), month_profit: n(g.month_profit),
+      updated_at: g.updated_at || '',
+    };
+  });
+
+  // סינתזה לצורת-מוצר → מופיעים במלאי/מכירות באופן טבעי (sku ייחודי 'GEN-…', ללא נתיב כתיבה ל-products)
+  GENERIC_PRODUCTS.forEach((g) => {
+    const avgIncl = g.month_qty > 0 ? (g.month_revenue / g.month_qty) : 0;   // מחיר ממוצע כולל מע"מ
+    const revExcl = g.month_revenue / 1.18;
+    const margin = revExcl > 0 ? Math.round((g.month_profit / revExcl) * 100) : 0;
+    PRODUCTS.push({
+      id: 'GEN-' + g.id,
+      sku: 'GEN-' + String(g.id).slice(0, 8),
+      name: g.name,
+      cat: 'generic',
+      catLabel: g.category,
+      supplier: g.supplier || 'פריט כללי',
+      cost: g.cost,
+      price: avgIncl,
+      stock: { mikado: g.stock_mikado, kohav: g.stock_kohav },
+      total: g.track_stock ? (g.stock_mikado + g.stock_kohav) : 0,
+      parallel: null,
+      extra: [],
+      weekly: g.weekly_qty,
+      margin,
+      is_promo: false,
+      min_stock: 0,
+      effective_sell_price: null,
+      promo: null,
+      created_at: '',
+      updated_at: g.updated_at,
+      units_per_pack: 1,
+      pack_label: '',
+      isGeneric: true,
+      genId: g.id,
+      monthRevenue: g.month_revenue,
+      monthProfit: g.month_profit,
+    });
   });
 
   // קטגוריות (לפי הקיימות בפועל)
@@ -386,7 +449,7 @@ async function loadAllData() {
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH, INVENTORY_VALUE_TOTAL,
     DAILY_DETAILS, APPROVED_PRODUCTS,
     PROMO_CATEGORIES, PROMO_BY_BARCODE, SETTINGS, FINANCE,
-    EMPLOYEES, EMPLOYEE_HOURS,
+    EMPLOYEES, EMPLOYEE_HOURS, GENERIC_PRODUCTS,
     BARCODE_ALIAS: _barcodeAlias,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
     LAST_REFRESH: Date.now(),
@@ -447,6 +510,25 @@ window.vatMult     = () => (window.vatOn() ? 1.18 : 1);              // מכפי
 window.vatMultOpp  = () => (window.vatOn() ? 1 : 1.18);             // מכפיל לשורה המשנית (הפוך)
 window.vatLabel    = () => (window.vatOn() ? 'כולל מע״מ' : 'ללא מע״מ');
 window.vatLabelOpp = () => (window.vatOn() ? 'ללא מע״מ' : 'כולל מע״מ');
+
+// ─── התאמת פריט כללי (05) לפי שם — זהה ל-match_generic ב-generic_match.py ───
+// מחזיר את רשומת ה-GENERIC_PRODUCTS עם ה-term הארוך ביותר שהוא substring בשם המנורמל,
+// או null. מילות קירור → תמיד null (נשמרות 100% רווח).
+window.matchGeneric = function (name) {
+  const reg = window.GENERIC_PRODUCTS || [];
+  if (!reg.length || !name) return null;
+  const words = String(name).split(/[\s,\-]+/);
+  if (words.some((w) => _COOLING_WORDS.includes(w))) return null;
+  const nn = _normGeneric(name);
+  if (!nn) return null;
+  let best = null, bestLen = 0;
+  for (const g of reg) {
+    for (const nt of (g._normTerms || [])) {
+      if (nt && nn.includes(nt) && nt.length > bestLen) { best = g; bestLen = nt.length; }
+    }
+  }
+  return best;
+};
 
 // ─── רענון אוטומטי: בכל חזרה לטאב + ברקע כל 90 שניות + Supabase realtime ───
 // כל אלה מעדכנים את window.PRODUCTS/MONTHLY/DAILY וכו'. הקומפוננטות

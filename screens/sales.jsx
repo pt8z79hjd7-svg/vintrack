@@ -39,10 +39,11 @@ const Sales = ({ activeBranch = 'both', onOpen }) => {
             const he = hasEff(p);
             const em = effMargin(p);
             return (
-              <tr key={p.id} onClick={() => onOpen?.('detail', p)} style={{ cursor: onOpen ? 'pointer' : 'default' }}>
+              <tr key={p.id} onClick={() => p.isGeneric ? (window.vintrackNav && window.vintrackNav('settings')) : onOpen?.('detail', p)} style={{ cursor: (onOpen || p.isGeneric) ? 'pointer' : 'default' }}>
                 <td style={{ color: 'var(--ink-3)', fontWeight: 700 }}>{i + 1}</td>
                 <td style={{ fontWeight: 600 }}>
                   {p.name}
+                  {p.isGeneric && <span className="badge" style={{ marginInlineStart: 6, fontSize: 10 }}>כללי</span>}
                   {p.promo && <span className="badge accent" style={{ marginInlineStart: 6, fontSize: 10 }}>🏷️ {p.promo.name}</span>}
                   {!p.promo && p.is_promo && <span className="badge accent" style={{ marginInlineStart: 6, fontSize: 10 }}>מבצע</span>}
                 </td>

@@ -155,14 +155,15 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
             </thead>
             <tbody>
               {pageItems.map(p => {
-                const catLabel = CATEGORIES.find(c => c.id === p.cat)?.label;
-                const supName = SUPPLIERS.find(s => s.id === p.supplier)?.name;
+                const isGen = !!p.isGeneric;
+                const catLabel = CATEGORIES.find(c => c.id === p.cat)?.label || p.catLabel;
+                const supName = SUPPLIERS.find(s => s.id === p.supplier)?.name || p.supplier;
                 const totalStock = activeBranch === 'mikado' ? p.stock.mikado
                                 : activeBranch === 'kohav'  ? p.stock.kohav
                                 : p.stock.mikado + p.stock.kohav + (p.parallel ? p.parallel.stock.mikado + p.parallel.stock.kohav : 0);
                 const negative = branchNeg(p);
                 return (
-                  <tr key={p.id} onClick={() => onOpen('detail', p)} className={negative ? 'row-neg' : ''}>
+                  <tr key={p.id} onClick={() => isGen ? (window.vintrackNav && window.vintrackNav('settings')) : onOpen('detail', p)} className={negative ? 'row-neg' : ''}>
                     <td onClick={(e) => e.stopPropagation()}><input type="checkbox" /></td>
                     <td>
                       <div className="row-product">
@@ -173,6 +174,9 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
                         <div>
                           <div className="row-product-name">
                             {p.name}
+                            {isGen && (
+                              <span className="parallel-pill" title="פריט כללי (05) — נוהל בהגדרות">כללי</span>
+                            )}
                             {p.parallel && (
                               <span className="parallel-pill" title="ייבוא מקביל">
                                 <ISplit size={10} /> מקביל

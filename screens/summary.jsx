@@ -5,6 +5,20 @@ const _vatMOpp    = () => (window.vatMultOpp  ? window.vatMultOpp()  : 1);
 const _vatLbl     = () => (window.vatLabel    ? window.vatLabel()    : 'כולל מע״מ');
 const _vatLblOpp  = () => (window.vatLabelOpp ? window.vatLabelOpp() : 'ללא מע״מ');
 
+// פריט כללי (05) — קירור = 100% רווח (לא דורש עלות)
+const _SUM_COOLING = ['קירור', 'קר', 'מקרר', 'קרה', 'קרר'];
+const _isCoolingName = (nm) => String(nm || '').split(/[\s,\-]+/).some(w => _SUM_COOLING.includes(w));
+// מחזיר עלות/רווח/מרווח לפריט 05 — מהפירוט המועשר (it.matched) או fallback ל-window.matchGeneric
+const _genericEnrich = (it) => {
+  const total = Number(it.total) || 0, qty = Number(it.qty) || 0;
+  if (it.matched) return { matched: it.matched, cost: Number(it.cost) || 0, profit: Number(it.profit) || 0, margin: Number(it.margin) || 0 };
+  const gm = window.matchGeneric ? window.matchGeneric(it.name) : null;
+  if (!gm) return null;
+  const cost = Number(gm.cost) || 0, revExcl = total / 1.18;
+  const profit = revExcl - cost * qty;
+  return { matched: gm.name, cost, profit, margin: revExcl ? (profit / revExcl) * 100 : 0 };
+};
+
 // === Daily — בחירת תאריך מביאה את נתוני אותו יום ===
 const Daily = ({ activeBranch = 'both', onOpen }) => {
   useLiveData();   // re-render אחרי refreshData
@@ -281,20 +295,45 @@ const DailyExpanded = ({ date, hasData }) => {
                   <span>·</span>
                   <span>{g.time || '—'}</span>
                 </div>
-                {(g.items || []).map((it, ii) => (
-                  <div key={ii} className="row" style={{
-                    justifyContent: 'space-between', padding: '4px 0',
-                    borderTop: ii > 0 ? '1px solid var(--line)' : 'none',
-                    fontWeight: it.is_generic ? 700 : 400,
-                    color: it.is_generic ? 'var(--accent)' : 'var(--ink-1)'
-                  }}>
-                    <span>{it.is_generic ? '☕ ' : '  · '}{it.name} ×{it.qty}</span>
-                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                      ₪{it.total}
-                      {it.discount > 0 && <span className="muted" style={{ fontSize: 11 }}> (-{it.discount}%)</span>}
-                    </span>
-                  </div>
-                ))}
+                {(g.items || []).map((it, ii) => {
+                  const enr = it.is_generic ? _genericEnrich(it) : null;
+                  const cooling = it.is_generic && !enr && _isCoolingName(it.name);
+                  return (
+                    <div key={ii} style={{ padding: '4px 0', borderTop: ii > 0 ? '1px solid var(--line)' : 'none' }}>
+                      <div className="row" style={{
+                        justifyContent: 'space-between',
+                        fontWeight: it.is_generic ? 700 : 400,
+                        color: it.is_generic ? 'var(--accent)' : 'var(--ink-1)'
+                      }}>
+                        <span>{it.is_generic ? '☕ ' : '  · '}{it.name} ×{it.qty}</span>
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          ₪{it.total}
+                          {it.discount > 0 && <span className="muted" style={{ fontSize: 11 }}> (-{it.discount}%)</span>}
+                        </span>
+                      </div>
+                      {it.is_generic && enr && (
+                        <div className="row" style={{ gap: 8, marginTop: 2, fontSize: 11, fontWeight: 400 }}>
+                          <span className="badge ok" style={{ fontSize: 10 }}>✓ עלות</span>
+                          <span className="muted">עלות ₪{enr.cost.toFixed(2)} · רווח <b style={{ color: enr.profit >= 0 ? 'var(--ok)' : 'var(--danger)' }}>₪{Math.round(enr.profit)}</b> · {Math.round(enr.margin)}%</span>
+                        </div>
+                      )}
+                      {it.is_generic && cooling && (
+                        <div className="row" style={{ gap: 8, marginTop: 2, fontSize: 11, fontWeight: 400 }}>
+                          <span className="badge" style={{ fontSize: 10 }}>🧊 100% רווח</span>
+                          <span className="muted">קירור — אין עלות</span>
+                        </div>
+                      )}
+                      {it.is_generic && !enr && !cooling && (
+                        <div className="row" style={{ gap: 8, marginTop: 2, fontSize: 11, fontWeight: 400 }}>
+                          <span className="badge" onClick={() => window.vintrackNav && window.vintrackNav('settings')}
+                                style={{ fontSize: 10, cursor: 'pointer', background: 'var(--warn-soft, rgba(220,150,0,0.15))', color: 'var(--warn, #b8860b)' }}>
+                            ❓ חסר עלות — הוסף
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
