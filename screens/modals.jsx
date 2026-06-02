@@ -152,8 +152,11 @@ const ProductDetailModal = ({ product, onClose }) => {
       parallel_unify_sales: false,
     };
     const { error } = await window.sb.from('products')
-      .update({ sell_price: price, cost_price: cost, supplier,
+      .update({ sell_price: Number.isFinite(price) ? price : 0,
+                cost_price: Number.isFinite(cost) ? cost : 0,
+                supplier,
                 min_stock: Math.max(0, Number(minStock) || 0),
+                updated_at: new Date().toISOString(),
                 ...parallelUpdate })
       .eq('barcode', product.sku);
     if (error) {
