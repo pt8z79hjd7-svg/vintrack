@@ -163,7 +163,7 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
                                 : p.stock.mikado + p.stock.kohav + (p.parallel ? p.parallel.stock.mikado + p.parallel.stock.kohav : 0);
                 const negative = branchNeg(p);
                 return (
-                  <tr key={p.id} onClick={() => isGen ? (window.vintrackNav && window.vintrackNav('settings')) : onOpen('detail', p)} className={negative ? 'row-neg' : ''}>
+                  <tr key={p.id} onClick={() => onOpen('detail', p)} className={negative ? 'row-neg' : ''}>
                     <td onClick={(e) => e.stopPropagation()}><input type="checkbox" /></td>
                     <td>
                       <div className="row-product">

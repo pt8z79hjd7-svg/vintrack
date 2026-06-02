@@ -24,6 +24,11 @@ const ProductDetailModal = ({ product, onClose }) => {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [parallel, setParallel] = useState(product.parallel);
+  // ─── פריט כללי (05) — שדות עריכה ייעודיים ל-generic_products ───
+  const isGen = !!product.isGeneric;
+  const [trackStock, setTrackStock] = useState(!!product.trackStock);
+  const [stockMikado, setStockMikado] = useState(product.stock?.mikado || 0);
+  const [stockKohav, setStockKohav] = useState(product.stock?.kohav || 0);
   const supName = SUPPLIERS.find(s => s.id === supplier)?.name || supplier;
 
   // ─── מיזוג עם מוצר קיים ───
@@ -115,6 +120,24 @@ const ProductDetailModal = ({ product, onClose }) => {
 
   const saveProduct = async () => {
     setSaving(true);
+    // ─── פריט כללי (05) → טבלת generic_products (לא products) ───
+    if (isGen) {
+      const payload = {
+        cost: Math.round((Number(cost) || 0) * 100) / 100,
+        supplier: (supplier || '').trim(),
+        track_stock: trackStock,
+        stock_mikado: trackStock ? (Number(stockMikado) || 0) : 0,
+        stock_kohav: trackStock ? (Number(stockKohav) || 0) : 0,
+        updated_at: new Date().toISOString(),
+      };
+      const { error: gErr } = await window.sb.from('generic_products').update(payload).eq('id', product.genId);
+      setSaving(false);
+      if (gErr) { (window.toast?.error || alert)('שמירה נכשלה: ' + gErr.message); return; }
+      setSaved(true); setEditing(false);
+      (window.toast?.success || alert)('✓ פריט כללי עודכן');
+      setTimeout(() => window.refreshData && window.refreshData('gen-save'), 500);
+      return;
+    }
     const parallelUpdate = parallel ? {
       has_parallel: true,
       parallel_barcode: parallel.sku || null,
@@ -186,10 +209,12 @@ const ProductDetailModal = ({ product, onClose }) => {
       footer={
         <>
           <button className="btn" onClick={onClose}>סגור</button>
-          <button className="btn"><IEdit size={14} /> ערוך מלא</button>
-          <button className="btn btn-primary">
-            <IPlus size={16} /> הזמן מספק
-          </button>
+          {!isGen && <button className="btn"><IEdit size={14} /> ערוך מלא</button>}
+          {!isGen && (
+            <button className="btn btn-primary">
+              <IPlus size={16} /> הזמן מספק
+            </button>
+          )}
         </>
       }
     >
@@ -202,7 +227,8 @@ const ProductDetailModal = ({ product, onClose }) => {
           </div>
           <div style={{ flex: 1 }}>
             <div className="row">
-              <Badge tone="accent">{cat}</Badge>
+              <Badge tone="accent">{cat || product.catLabel}</Badge>
+              {isGen && <Badge tone="default">🧩 פריט כללי (ללא ברקוד)</Badge>}
               {parallel && <Badge tone="default"><ISplit size={11} /> ייבוא מקביל</Badge>}
             </div>
             <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 6 }}>
@@ -246,14 +272,21 @@ const ProductDetailModal = ({ product, onClose }) => {
                 )}
               </div>
               <div>
-                <div className="muted" style={{ fontSize: 11 }}>מחיר צרכן (כולל מע״מ)</div>
-                {editing ? (
+                <div className="muted" style={{ fontSize: 11 }}>
+                  {isGen ? 'מחיר ממוצע (ממכירות הקופה)' : 'מחיר צרכן (כולל מע״מ)'}
+                </div>
+                {(editing && !isGen) ? (
                   <input className="input" type="number" step="0.01"
                          value={price} onChange={(e) => setPrice(+e.target.value)}
                          style={{ fontSize: 18, fontWeight: 700, padding: '4px 8px' }} />
                 ) : (
                   <div style={{ fontSize: 20, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--accent-strong)' }}>
-                    ₪{price.toFixed(2)}
+                    ₪{Number(price || 0).toFixed(2)}
+                  </div>
+                )}
+                {isGen && (
+                  <div className="muted" style={{ fontSize: 10, marginTop: 2 }}>
+                    מחושב מ-CashOnTab — לא ניתן לעריכה
                   </div>
                 )}
               </div>
@@ -264,30 +297,71 @@ const ProductDetailModal = ({ product, onClose }) => {
                 </div>
               </div>
             </div>
-            {/* מינימום מלאי — מתי להזמין */}
-            <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
-                          display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between' }}>
-              <div>
-                <div className="muted" style={{ fontSize: 11 }}>מינימום מלאי להתראה</div>
-                <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                  אם מלאי כולל מתחת לזה — תופיע התראה להזמנה
+            {/* מינימום מלאי — מתי להזמין (לא רלוונטי לפריט כללי) */}
+            {!isGen && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)',
+                            display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between' }}>
+                <div>
+                  <div className="muted" style={{ fontSize: 11 }}>מינימום מלאי להתראה</div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                    אם מלאי כולל מתחת לזה — תופיע התראה להזמנה
+                  </div>
+                </div>
+                {editing ? (
+                  <input className="input" type="number" min="0" step="1" value={minStock}
+                         onChange={(e) => setMinStock(+e.target.value)}
+                         style={{ width: 80, fontSize: 16, fontWeight: 700, padding: '4px 8px', textAlign: 'center' }} />
+                ) : (
+                  <div style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                                padding: '4px 14px', background: 'var(--surface)', borderRadius: 'var(--r-md)' }}>
+                    {minStock} יח׳
+                  </div>
+                )}
+              </div>
+            )}
+            {/* פריט כללי — toggle מלאי + עריכת כמות לסניף */}
+            {isGen && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+                <label className="row" style={{ gap: 8, cursor: 'pointer', alignItems: 'center' }}>
+                  <input type="checkbox" checked={trackStock}
+                         onChange={(e) => setTrackStock(e.target.checked)}
+                         disabled={!editing} />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>עקוב מלאי (פריט פיזי)</span>
+                </label>
+                {trackStock && (
+                  <div className="row" style={{ gap: 14, marginTop: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <div>
+                      <div className="muted" style={{ fontSize: 11 }}>מלאי מיקדו</div>
+                      {editing ? (
+                        <input className="input" type="number" min="0" step="1" value={stockMikado}
+                               onChange={(e) => setStockMikado(+e.target.value)}
+                               style={{ width: 100, padding: '6px 10px', textAlign: 'center', fontWeight: 700 }} />
+                      ) : (
+                        <div style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{stockMikado} יח׳</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="muted" style={{ fontSize: 11 }}>מלאי כוכב הצפון</div>
+                      {editing ? (
+                        <input className="input" type="number" min="0" step="1" value={stockKohav}
+                               onChange={(e) => setStockKohav(+e.target.value)}
+                               style={{ width: 100, padding: '6px 10px', textAlign: 'center', fontWeight: 700 }} />
+                      ) : (
+                        <div style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{stockKohav} יח׳</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="muted" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>
+                  פריטים פיזיים (סיגרים/אביזרים) — סמן מעקב והזן כמויות. אביזרים שאינם פיזיים (קר/קירור) — השאר ללא מעקב.
                 </div>
               </div>
-              {editing ? (
-                <input className="input" type="number" min="0" step="1" value={minStock}
-                       onChange={(e) => setMinStock(+e.target.value)}
-                       style={{ width: 80, fontSize: 16, fontWeight: 700, padding: '4px 8px', textAlign: 'center' }} />
-              ) : (
-                <div style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-                              padding: '4px 14px', background: 'var(--surface)', borderRadius: 'var(--r-md)' }}>
-                  {minStock} יח׳
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
 
-        {/* מבצע לקוחות — שיוך + חישוב רווח אמיתי במחיר מבצע */}
+        {/* מבצע לקוחות — שיוך + חישוב רווח אמיתי במחיר מבצע (לא רלוונטי לפריט כללי) */}
+        {!isGen && (<>
         <div className="card" style={{ background: 'var(--surface)' }}>
           <div style={{ padding: 16 }}>
             <div className="between" style={{ marginBottom: 12 }}>
@@ -368,8 +442,27 @@ const ProductDetailModal = ({ product, onClose }) => {
             })()}
           </div>
         </div>
+        </>)}
 
-        {/* Main supplier + stock */}
+        {/* פריט כללי — שדה ספק פשוט (אין SUPPLIERS-id) */}
+        {isGen && (
+          <div className="card" style={{ background: 'var(--surface)' }}>
+            <div style={{ padding: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>ספק</div>
+              {editing ? (
+                <input className="input" value={supplier || ''}
+                       onChange={(e) => setSupplier(e.target.value)}
+                       placeholder="שם ספק (חופשי)"
+                       style={{ width: '100%', padding: '6px 10px', fontSize: 13 }} />
+              ) : (
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{supplier || <span className="muted">—</span>}</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Main supplier + stock — מוצר רגיל בלבד */}
+        {!isGen && (
         <div>
           <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>ספק ראשי</div>
           <div className="parallel-card">
@@ -402,9 +495,10 @@ const ProductDetailModal = ({ product, onClose }) => {
             </div>
           </div>
         </div>
+        )}
 
-        {/* Parallel import section — only shown if exists */}
-        {parallel ? (
+        {/* Parallel import section — only shown if exists (לא רלוונטי לפריט כללי) */}
+        {!isGen && (parallel ? (
           <div>
             <div className="between" style={{ marginBottom: 10 }}>
               <div className="row">
@@ -559,31 +653,33 @@ const ProductDetailModal = ({ product, onClose }) => {
               </div>
             )}
           </div>
-        )}
+        ))}
 
-        {/* Totals */}
-        <div className="total-strip">
-          <div>
-            <div className="muted" style={{ fontSize: 11 }}>סה״כ מלאי כולל</div>
-            <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-              {totalStock} יח׳
+        {/* Totals — לא רלוונטי לפריט כללי */}
+        {!isGen && (
+          <div className="total-strip">
+            <div>
+              <div className="muted" style={{ fontSize: 11 }}>סה״כ מלאי כולל</div>
+              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                {totalStock} יח׳
+              </div>
+            </div>
+            <div className="total-strip-divider" />
+            <div>
+              <div className="muted" style={{ fontSize: 11 }}>ערך מלאי</div>
+              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                ₪{(mainStock * product.cost + parStock * (parallel?.cost || 0)).toLocaleString('he-IL', { maximumFractionDigits: 0 })}
+              </div>
+            </div>
+            <div className="total-strip-divider" />
+            <div>
+              <div className="muted" style={{ fontSize: 11 }}>פוטנציאל מכירה</div>
+              <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--ok)' }}>
+                ₪{(totalStock * price).toLocaleString('he-IL', { maximumFractionDigits: 0 })}
+              </div>
             </div>
           </div>
-          <div className="total-strip-divider" />
-          <div>
-            <div className="muted" style={{ fontSize: 11 }}>ערך מלאי</div>
-            <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-              ₪{(mainStock * product.cost + parStock * (parallel?.cost || 0)).toLocaleString('he-IL', { maximumFractionDigits: 0 })}
-            </div>
-          </div>
-          <div className="total-strip-divider" />
-          <div>
-            <div className="muted" style={{ fontSize: 11 }}>פוטנציאל מכירה</div>
-            <div style={{ fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--ok)' }}>
-              ₪{(totalStock * price).toLocaleString('he-IL', { maximumFractionDigits: 0 })}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </Modal>
   );

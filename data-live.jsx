@@ -203,6 +203,8 @@ async function loadAllData() {
       pack_label: '',
       isGeneric: true,
       genId: g.id,
+      trackStock: !!g.track_stock,
+      matchTerms: g.match_terms || [],
       monthRevenue: g.month_revenue,
       monthProfit: g.month_profit,
     });

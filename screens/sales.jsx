@@ -39,7 +39,7 @@ const Sales = ({ activeBranch = 'both', onOpen }) => {
             const he = hasEff(p);
             const em = effMargin(p);
             return (
-              <tr key={p.id} onClick={() => p.isGeneric ? (window.vintrackNav && window.vintrackNav('settings')) : onOpen?.('detail', p)} style={{ cursor: (onOpen || p.isGeneric) ? 'pointer' : 'default' }}>
+              <tr key={p.id} onClick={() => onOpen?.('detail', p)} style={{ cursor: onOpen ? 'pointer' : 'default' }}>
                 <td style={{ color: 'var(--ink-3)', fontWeight: 700 }}>{i + 1}</td>
                 <td style={{ fontWeight: 600 }}>
                   {p.name}
