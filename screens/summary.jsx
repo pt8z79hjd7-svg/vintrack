@@ -679,79 +679,56 @@ const Monthly = ({ activeBranch = 'both' }) => {
         </div>
       </Card>
 
-      <Card title="טבלת סיכום — כולל הכנסות חוץ-קופה" sub={`${sel.length} חודשים`}>
-        <div className="table-wrap">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>חודש</th>
-                <th style={{ textAlign: 'end' }}>מחזור חנות</th>
-                <th style={{ textAlign: 'end' }}>מיקדו</th>
-                <th style={{ textAlign: 'end' }}>כוכב</th>
-                <th style={{ textAlign: 'end' }}>רווח גולמי</th>
-                <th style={{ textAlign: 'end' }}>מרווח %</th>
-                <th style={{ textAlign: 'center' }}>ימים</th>
-                <th style={{ textAlign: 'end' }}>חוץ-קופה</th>
-                <th style={{ textAlign: 'end' }}>סה״כ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...sel].reverse().map((m) => {
-                const finRow = (window.FINANCE?.byMonth || {})[m.month] || {};
-                const ext = (Number(finRow.wolt) || 0) + (Number(finRow.tenbis) || 0) + (Number(finRow.external_sales) || 0);
-                const extInclVat = Math.round(ext * _vatM());
-                const total = m.total + m.extra + ext;
-                const marginGood = m.margin >= 25;
-                return (
-                  <tr key={m.m} style={m.current ? { background: 'var(--accent-soft)' } : {}}>
-                    <td style={{ fontWeight: 700 }}>{m.m}{m.current && <Badge tone="accent" style={{ marginInlineStart: 6 }}>נוכחי</Badge>}</td>
-                    <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.total * _vatM()).toLocaleString('he-IL')}</td>
-                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.mikado * _vatM()).toLocaleString('he-IL')}</td>
-                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.kohav * _vatM()).toLocaleString('he-IL')}</td>
-                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>₪{m.profit.toLocaleString('he-IL')}</td>
-                    <td style={{ textAlign: 'end' }}><span className={`badge ${marginGood ? 'ok' : 'warn'}`}>{m.margin.toFixed(1)}%</span></td>
-                    <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{m.days}</td>
-                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', color: ext > 0 ? 'var(--accent-strong)' : 'var(--ink-3)' }}>
-                      {ext > 0 ? `₪${extInclVat.toLocaleString('he-IL')}` : '—'}
-                    </td>
-                    <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--accent-strong)' }}>₪{Math.round(total * _vatM()).toLocaleString('he-IL')}</td>
+      {(() => {
+        // עמודות "חוץ-קופה" + "סה״כ" מוצגות רק כשבאמת יש הכנסה חוץ-קופתית (וולט/תן-ביס/אחר/הכנסה נוספת)
+        // בטווח הנבחר — אחרת הן זהות ל"מחזור חנות" ורק מכפילות מידע.
+        const extOf = (m) => {
+          const fr = (window.FINANCE?.byMonth || {})[m.month] || {};
+          return (Number(fr.wolt) || 0) + (Number(fr.tenbis) || 0) + (Number(fr.external_sales) || 0);
+        };
+        const hasExt = sel.some((m) => (extOf(m) + (Number(m.extra) || 0)) > 0);
+        return (
+          <Card title="טבלת סיכום חודשי" sub={`${sel.length} חודשים · ${_vatLbl()}${hasExt ? ' · כולל הכנסות חוץ-קופה' : ''}`}>
+            <div className="table-wrap">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>חודש</th>
+                    <th style={{ textAlign: 'end' }}>מחזור חנות</th>
+                    <th style={{ textAlign: 'end' }}>מיקדו</th>
+                    <th style={{ textAlign: 'end' }}>כוכב</th>
+                    <th style={{ textAlign: 'end' }}>רווח גולמי</th>
+                    <th style={{ textAlign: 'end' }}>מרווח %</th>
+                    <th style={{ textAlign: 'center' }}>ימים</th>
+                    {hasExt && <th style={{ textAlign: 'end' }}>חוץ-קופה</th>}
+                    {hasExt && <th style={{ textAlign: 'end' }}>סה״כ</th>}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      {/* ─── מחזור חנות בלבד (ללא הכנסות חיצוניות) ─── */}
-      <Card title="מחזור חנות בלבד" sub="ללא הכנסות חוץ-קופה (וולט/תן-ביס/אחר) — מה שהקופה עשתה">
-        <div className="table-wrap">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>חודש</th>
-                <th style={{ textAlign: 'end' }}>מיקדו</th>
-                <th style={{ textAlign: 'end' }}>כוכב</th>
-                <th style={{ textAlign: 'end' }}>סה״כ חנות</th>
-                <th style={{ textAlign: 'end' }}>רווח גולמי</th>
-                <th style={{ textAlign: 'end' }}>מרווח %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...sel].reverse().map((m) => (
-                <tr key={`store-${m.m}`} style={m.current ? { background: 'var(--accent-soft)' } : {}}>
-                  <td style={{ fontWeight: 700 }}>{m.m}</td>
-                  <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.mikado * _vatM()).toLocaleString('he-IL')}</td>
-                  <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.kohav * _vatM()).toLocaleString('he-IL')}</td>
-                  <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.total * _vatM()).toLocaleString('he-IL')}</td>
-                  <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--ok)' }}>₪{m.profit.toLocaleString('he-IL')}</td>
-                  <td style={{ textAlign: 'end' }}><span className={`badge ${m.margin >= 25 ? 'ok' : 'warn'}`}>{m.margin.toFixed(1)}%</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                </thead>
+                <tbody>
+                  {[...sel].reverse().map((m) => {
+                    const ext = extOf(m);
+                    const total = m.total + m.extra + ext;
+                    const marginGood = m.margin >= 25;
+                    return (
+                      <tr key={m.m} style={m.current ? { background: 'var(--accent-soft)' } : {}}>
+                        <td style={{ fontWeight: 700 }}>{m.m}{m.current && <Badge tone="accent" style={{ marginInlineStart: 6 }}>נוכחי</Badge>}</td>
+                        <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.total * _vatM()).toLocaleString('he-IL')}</td>
+                        <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.mikado * _vatM()).toLocaleString('he-IL')}</td>
+                        <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(m.kohav * _vatM()).toLocaleString('he-IL')}</td>
+                        <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>₪{m.profit.toLocaleString('he-IL')}</td>
+                        <td style={{ textAlign: 'end' }}><span className={`badge ${marginGood ? 'ok' : 'warn'}`}>{m.margin.toFixed(1)}%</span></td>
+                        <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{m.days}</td>
+                        {hasExt && <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', color: ext > 0 ? 'var(--accent-strong)' : 'var(--ink-3)' }}>{ext > 0 ? `₪${Math.round(ext * _vatM()).toLocaleString('he-IL')}` : '—'}</td>}
+                        {hasExt && <td style={{ textAlign: 'end', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--accent-strong)' }}>₪{Math.round(total * _vatM()).toLocaleString('he-IL')}</td>}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* ─── טבלת רווח והפסד (P&L) — מחזור מול רכש מול הוצאות ─── */}
       <Card title={`📊 רווח והפסד (P&L) · ${_vatLbl()}`} sub="מחזור − רכש סחורה − הוצאות = שורה תחתונה">
