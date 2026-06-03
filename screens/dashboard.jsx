@@ -171,6 +171,96 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         </div>
       </div>
 
+      {/* ─── סיכום מכירות יומי ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
+        <Card
+          title={`סיכום יומי · ${dailyKey || '—'}${dailyIsToday ? ' (היום)' : ''}`}
+          sub={dailyHasData
+            ? `${dailyRaw.salesLines} שורות מכירה · עודכן לפני ${minsAgo < 1 ? 'רגע' : minsAgo < 60 ? minsAgo + ' דק׳' : Math.round(minsAgo/60) + ' שע׳'}${dailyIsToday ? ' · הנתון חי, גדל לאורך היום' : ''}`
+            : 'אין עדיין נתונים — יורד בריצה הבאה'}
+          action={
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn btn-sm btn-ghost"
+                      onClick={() => (window.requestFreshSync || window.refreshData)('dashboard-refresh')}
+                      title="הוריד דוח טרי מ-CashOnTab ועדכן">
+                ↻
+              </button>
+              <button className="btn btn-sm btn-ghost" onClick={() => onNav('daily')}>פירוט →</button>
+            </div>
+          }
+        >
+          <div style={{ padding: 18 }}>
+            {dailyDateNotice && (
+              <div style={{ padding: '8px 12px', marginBottom: 12, background: '#fff8e1', border: '1px solid #f0c674',
+                            borderRadius: 'var(--r-md)', fontSize: 12.5, color: '#7a5b00', lineHeight: 1.4 }}>
+                ⚠ {dailyDateNotice}
+              </div>
+            )}
+            {dailyHasData ? (
+              <>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
+                  <div>
+                    <div className="muted" style={{ fontSize: 11 }}>מחזור ({VAT_LBL})</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtCurrency(Math.round(dailyTotal * VAT))}
+                    </div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                      {VAT_LBL_OPP}: <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{fmtCurrency(Math.round(dailyTotal * VAT_OPP))}</span>
+                    </div>
+                  </div>
+                  {avg7 > 0 && (
+                    <div style={{ textAlign: 'end' }}>
+                      <div className="muted" style={{ fontSize: 11 }}>מול ממוצע 7 ימים</div>
+                      <div className={`row`} style={{ gap: 4, justifyContent: 'flex-end', fontWeight: 700,
+                                                       color: dailyVsAvg >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
+                        {dailyVsAvg >= 0 ? <IArrowUp size={14} /> : <IArrowDown size={14} />}
+                        {Math.abs(dailyVsAvg).toFixed(1)}%
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="grid-2" style={{ gap: 10 }}>
+                  {(activeBranch === 'both' || activeBranch === 'mikado') && (
+                    <div style={{ padding: 10, background: 'var(--surface)', borderRadius: 'var(--r-md)' }}>
+                      <div className="row" style={{ gap: 6, marginBottom: 4 }}>
+                        <span className="branch-dot" style={{ background: BRANCHES[0].color }} />
+                        <span className="muted" style={{ fontSize: 12 }}>מיקדו</span>
+                      </div>
+                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(dailyRaw.mikado * VAT))}</div>
+                    </div>
+                  )}
+                  {(activeBranch === 'both' || activeBranch === 'kohav') && (
+                    <div style={{ padding: 10, background: 'var(--surface)', borderRadius: 'var(--r-md)' }}>
+                      <div className="row" style={{ gap: 6, marginBottom: 4 }}>
+                        <span className="branch-dot" style={{ background: BRANCHES[1].color }} />
+                        <span className="muted" style={{ fontSize: 12 }}>כוכב הצפון</span>
+                      </div>
+                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(dailyRaw.kohav * VAT))}</div>
+                    </div>
+                  )}
+                </div>
+                <div className="row" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)', justifyContent: 'space-between' }}>
+                  <div>
+                    <div className="muted" style={{ fontSize: 11 }}>רווח גולמי</div>
+                    <div style={{ fontWeight: 700, color: 'var(--ok)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(dailyProfit)}</div>
+                  </div>
+                  <div style={{ textAlign: 'end' }}>
+                    <div className="muted" style={{ fontSize: 11 }}>מרווח</div>
+                    <div style={{ fontWeight: 700 }}><span className={`badge ${dailyRaw.margin >= TARGETS.margin ? 'ok' : 'warn'}`}>{Number(dailyRaw.margin || 0).toFixed(1)}%</span></div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ textAlign: 'center', padding: 30, color: 'var(--ink-3)', fontSize: 13 }}>
+                {dailyIsToday
+                  ? 'הורדת המכירות תרוץ אוטומטית בשעה הקרובה (09/12/15/18/21).'
+                  : 'אין נתונים לתאריך זה.'}
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+
       {/* KPI cards (clickable) */}
       <div className="kpi-grid kpi-5">
         <button className={`kpi kpi-clickable ${revenueOK ? 'kpi-ok' : ''}`} onClick={() => onNav('monthly')}>
@@ -488,95 +578,8 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         );
       })()}
 
-      {/* ─── סיכום מכירות יומי + חודשי מעודכן ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <Card
-          title={`סיכום יומי · ${dailyKey || '—'}${dailyIsToday ? ' (היום)' : ''}`}
-          sub={dailyHasData
-            ? `${dailyRaw.salesLines} שורות מכירה · עודכן לפני ${minsAgo < 1 ? 'רגע' : minsAgo < 60 ? minsAgo + ' דק׳' : Math.round(minsAgo/60) + ' שע׳'}${dailyIsToday ? ' · הנתון חי, גדל לאורך היום' : ''}`
-            : 'אין עדיין נתונים — יורד בריצה הבאה'}
-          action={
-            <div className="row" style={{ gap: 6 }}>
-              <button className="btn btn-sm btn-ghost"
-                      onClick={() => (window.requestFreshSync || window.refreshData)('dashboard-refresh')}
-                      title="הוריד דוח טרי מ-CashOnTab ועדכן">
-                ↻
-              </button>
-              <button className="btn btn-sm btn-ghost" onClick={() => onNav('daily')}>פירוט →</button>
-            </div>
-          }
-        >
-          <div style={{ padding: 18 }}>
-            {dailyDateNotice && (
-              <div style={{ padding: '8px 12px', marginBottom: 12, background: '#fff8e1', border: '1px solid #f0c674',
-                            borderRadius: 'var(--r-md)', fontSize: 12.5, color: '#7a5b00', lineHeight: 1.4 }}>
-                ⚠ {dailyDateNotice}
-              </div>
-            )}
-            {dailyHasData ? (
-              <>
-                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 14 }}>
-                  <div>
-                    <div className="muted" style={{ fontSize: 11 }}>מחזור ({VAT_LBL})</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
-                      {fmtCurrency(Math.round(dailyTotal * VAT))}
-                    </div>
-                    <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-                      {VAT_LBL_OPP}: <span style={{ color: 'var(--ink-2)', fontWeight: 600 }}>{fmtCurrency(Math.round(dailyTotal * VAT_OPP))}</span>
-                    </div>
-                  </div>
-                  {avg7 > 0 && (
-                    <div style={{ textAlign: 'end' }}>
-                      <div className="muted" style={{ fontSize: 11 }}>מול ממוצע 7 ימים</div>
-                      <div className={`row`} style={{ gap: 4, justifyContent: 'flex-end', fontWeight: 700,
-                                                       color: dailyVsAvg >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
-                        {dailyVsAvg >= 0 ? <IArrowUp size={14} /> : <IArrowDown size={14} />}
-                        {Math.abs(dailyVsAvg).toFixed(1)}%
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="grid-2" style={{ gap: 10 }}>
-                  {(activeBranch === 'both' || activeBranch === 'mikado') && (
-                    <div style={{ padding: 10, background: 'var(--surface)', borderRadius: 'var(--r-md)' }}>
-                      <div className="row" style={{ gap: 6, marginBottom: 4 }}>
-                        <span className="branch-dot" style={{ background: BRANCHES[0].color }} />
-                        <span className="muted" style={{ fontSize: 12 }}>מיקדו</span>
-                      </div>
-                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(dailyRaw.mikado * VAT))}</div>
-                    </div>
-                  )}
-                  {(activeBranch === 'both' || activeBranch === 'kohav') && (
-                    <div style={{ padding: 10, background: 'var(--surface)', borderRadius: 'var(--r-md)' }}>
-                      <div className="row" style={{ gap: 6, marginBottom: 4 }}>
-                        <span className="branch-dot" style={{ background: BRANCHES[1].color }} />
-                        <span className="muted" style={{ fontSize: 12 }}>כוכב הצפון</span>
-                      </div>
-                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(dailyRaw.kohav * VAT))}</div>
-                    </div>
-                  )}
-                </div>
-                <div className="row" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)', justifyContent: 'space-between' }}>
-                  <div>
-                    <div className="muted" style={{ fontSize: 11 }}>רווח גולמי</div>
-                    <div style={{ fontWeight: 700, color: 'var(--ok)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(dailyProfit)}</div>
-                  </div>
-                  <div style={{ textAlign: 'end' }}>
-                    <div className="muted" style={{ fontSize: 11 }}>מרווח</div>
-                    <div style={{ fontWeight: 700 }}><span className={`badge ${dailyRaw.margin >= TARGETS.margin ? 'ok' : 'warn'}`}>{Number(dailyRaw.margin || 0).toFixed(1)}%</span></div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div style={{ textAlign: 'center', padding: 30, color: 'var(--ink-3)', fontSize: 13 }}>
-                {dailyIsToday
-                  ? 'הורדת המכירות תרוץ אוטומטית בשעה הקרובה (09/12/15/18/21).'
-                  : 'אין נתונים לתאריך זה.'}
-              </div>
-            )}
-          </div>
-        </Card>
-
+      {/* ─── סיכום מכירות חודשי ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
         <Card
           title={`סיכום חודשי · ${monthRaw.m || ''}`}
           sub={`${daysActive || 0} ימי פעילות${_hasCurData ? ` · ממוצע ${fmtCurrency(Math.round(avgPerDay || 0))}/יום` : ' · ממתין לנתונים'}`}
