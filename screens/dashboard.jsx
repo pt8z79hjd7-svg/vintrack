@@ -495,7 +495,7 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         );
       })()}
 
-      {/* ─── דוח רווח והפסד (P&L) — מחזור מול רכש מול הוצאות ─── */}
+      {/* ─── תזרים מזומנים (Cash Flow) — מכירות מול רכש ששולם מול הוצאות ─── */}
       {(() => {
         const F = (window.FINANCE && window.FINANCE.current) || {};
         const revExcl = F.revenue || monthRaw.total || 0;
@@ -506,11 +506,11 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         const salCalc = F.salaries_calculated || 0;
         const exp = F.totalExpense || 0;
         const otherExp = exp - salCalc;
-        const plNet = revV + inc - purchV - exp;
-        const plMargin = revV > 0 ? (plNet / revV) * 100 : 0;
+        const cashNet = revV + inc - purchV - exp;
+        const cashMargin = revV > 0 ? (cashNet / revV) * 100 : 0;
         const hasPurch = purchExcl > 0;
         const hasExp = exp > 0;
-        const plOK = plNet >= 0;
+        const cashOK = cashNet >= 0;
         const lineS = { display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 13 };
         const sepS = { borderTop: '1px solid var(--line)', margin: '4px 0' };
         const totS = { display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 15, fontWeight: 800 };
@@ -518,9 +518,9 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
           <div className="card" style={{ padding: '16px 20px', borderRight: '3px solid var(--accent-strong)' }}>
             <div className="between" style={{ alignItems: 'flex-start', marginBottom: 14 }}>
               <div>
-                <div className="muted" style={{ fontSize: 11 }}>דוח רווח והפסד (P&L) · {monthRaw.m || ''} · {VAT_LBL}</div>
+                <div className="muted" style={{ fontSize: 11 }}>תזרים מזומנים · {monthRaw.m || ''} · {VAT_LBL}</div>
                 <div className="muted" style={{ fontSize: 10.5, marginTop: 2 }}>
-                  מחזור בפועל מול עלות רכש סחורה + הוצאות תפעוליות
+                  מכירות + חוץ-קופה − רכש ששולם לספקים − הוצאות (כולל מע״מ)
                 </div>
               </div>
               <button className="btn btn-sm btn-ghost" onClick={() => onNav('monthly')}>סיכום חודשי →</button>
@@ -557,10 +557,10 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
               )}
               <div style={{ borderTop: '2px solid var(--ink-1)', margin: '6px 0' }} />
               <div style={totS}>
-                <span>= שורה תחתונה</span>
-                <span style={{ color: plOK ? 'var(--ok)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
-                  {fmtCurrency(Math.round(plNet))}
-                  <span style={{ fontSize: 12, fontWeight: 500, marginInlineStart: 6 }}>({plMargin.toFixed(1)}%)</span>
+                <span>= תזרים נטו</span>
+                <span style={{ color: cashOK ? 'var(--ok)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtCurrency(Math.round(cashNet))}
+                  <span style={{ fontSize: 12, fontWeight: 500, marginInlineStart: 6 }}>({cashMargin.toFixed(1)}%)</span>
                 </span>
               </div>
             </div>
