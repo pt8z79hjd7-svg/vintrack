@@ -40,7 +40,8 @@ Object.assign(window, {
   PROMO_CATEGORIES: [], PROMO_BY_BARCODE: {},
   SETTINGS: { profitTarget: 25, defaultMin: 3, categoryMin: {}, showInclVat: true },
   FINANCE: { byMonth: {}, current: { totalExpense: 0, totalIncome: 0, grossProfit: 0, revenue: 0, netProfit: 0, netMargin: 0 } },
-  EMPLOYEES: [], EMPLOYEE_HOURS: {}, GENERIC_PRODUCTS: [],
+  EMPLOYEES: [], EMPLOYEE_HOURS: {}, GENERIC_PRODUCTS: [], EXTERNAL_CLIENTS: [],
+  SUPPLIER_PURCHASES: { byMonth: {}, all: [] }, SUPPLIER_TERMS: [],
   BARCODE_ALIAS: {},
 });
 
@@ -64,7 +65,7 @@ async function fetchAll(table, select = '*', opts = {}) {
 
 async function loadAllData() {
   const sb = window.sb;
-  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR, empR, empHoursR, genR, extR] = await Promise.all([
+  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR, empR, empHoursR, genR, extR, spR, supR] = await Promise.all([
     fetchAll('products'),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
@@ -82,6 +83,8 @@ async function loadAllData() {
     sb.from('employee_hours').select('*'),     // שעות לפי חודש — graceful אם הטבלה חסרה
     sb.from('generic_products').select('*').eq('is_active', true),  // פריטים כלליים (05) — graceful אם הטבלה חסרה
     sb.from('external_clients').select('*').eq('is_active', true),   // לקוחות חיצוניים (וולט/תן ביס/פורטונה) — graceful אם הטבלה חסרה
+    sb.from('supplier_purchases').select('*'),   // רכש לפי ספק×חודש (נכתב ע"י הצינור) — graceful אם הטבלה חסרה
+    sb.from('suppliers').select('*'),            // תנאי תשלום לספקים (מנוהל-אפליקציה) — graceful אם הטבלה חסרה
   ]);
 
   // ─── אזהרה על טבלאות שנכשלו בטעינה (במקום silent || []) ───
@@ -99,6 +102,8 @@ async function loadAllData() {
   // generic_products — טבלה אופציונלית/תוספתית: כשל (למשל טרם הורצה ה-SQL) נרשם לקונסול בלבד, ללא אזהרה מטרידה
   if (genR && genR.error) console.warn('[VinTrack] generic_products לא נטענה (אופציונלי):', genR.error.message || genR.error.code || 'unknown');
   if (extR && extR.error) console.warn('[VinTrack] external_clients לא נטענה (אופציונלי):', extR.error.message || extR.error.code || 'unknown');
+  if (spR && spR.error) console.warn('[VinTrack] supplier_purchases לא נטענה (אופציונלי):', spR.error.message || spR.error.code || 'unknown');
+  if (supR && supR.error) console.warn('[VinTrack] suppliers לא נטענה (אופציונלי):', supR.error.message || supR.error.code || 'unknown');
 
   // ─── מבצעי לקוחות (סוגי מבצעים + שיוך לכל מוצר) ───
   const PROMO_CATEGORIES = (pcatR.data || []).map((c) => {
@@ -231,6 +236,37 @@ async function loadAllData() {
       month_cost: n(c.month_cost), month_expected_net: n(c.month_expected_net),
       updated_at: c.updated_at || '',
     };
+  });
+
+  // ─── רכש וחבות לפי ספק (חודש×ספק) + תנאי תשלום ───
+  // SUPPLIER_TERMS = [{name, payment_terms_days, match_terms, _normTerms, active, notes}] — מנוהל-אפליקציה.
+  // match_terms מנורמלים מראש ל-window.matchSupplier (שמות בת.מ. רכש = שמות מלאים/וריאנטים → קנוני).
+  // SUPPLIER_PURCHASES.byMonth[month] = [{supplier, amount_incl,...}] ממוין יורד; .all = הכל.
+  const SUPPLIER_TERMS = ((supR && supR.data) || []).map((s) => {
+    let terms = s.match_terms || [];
+    if (typeof terms === 'string') { try { terms = JSON.parse(terms); } catch { terms = []; } }
+    if (!Array.isArray(terms)) terms = [];
+    const _normTerms = terms.map((t) => _normGeneric(t)).filter(Boolean);
+    return {
+      name: s.name, payment_terms_days: n(s.payment_terms_days) || 30,
+      match_terms: terms, _normTerms,
+      active: s.active !== false, notes: s.notes || '',
+    };
+  });
+  const SUPPLIER_PURCHASES = { byMonth: {}, all: [] };
+  ((spR && spR.data) || []).forEach((r) => {
+    if (!r.month || !r.supplier) return;
+    const rec = {
+      month: r.month, month_label: r.month_label || mlabel(r.month), supplier: r.supplier,
+      amount_incl: n(r.amount_incl), amount_excl: n(r.amount_excl), units: n(r.units),
+      incl_mikado: n(r.incl_mikado), incl_kochav: n(r.incl_kochav),
+      doc_count: n(r.doc_count), is_current: !!r.is_current,
+    };
+    SUPPLIER_PURCHASES.all.push(rec);
+    (SUPPLIER_PURCHASES.byMonth[rec.month] = SUPPLIER_PURCHASES.byMonth[rec.month] || []).push(rec);
+  });
+  Object.keys(SUPPLIER_PURCHASES.byMonth).forEach((m) => {
+    SUPPLIER_PURCHASES.byMonth[m].sort((a, b) => b.amount_incl - a.amount_incl);
   });
 
   // קטגוריות (לפי הקיימות בפועל)
@@ -475,6 +511,7 @@ async function loadAllData() {
     DAILY_DETAILS, APPROVED_PRODUCTS,
     PROMO_CATEGORIES, PROMO_BY_BARCODE, SETTINGS, FINANCE,
     EMPLOYEES, EMPLOYEE_HOURS, GENERIC_PRODUCTS, EXTERNAL_CLIENTS,
+    SUPPLIER_PURCHASES, SUPPLIER_TERMS,
     BARCODE_ALIAS: _barcodeAlias,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
     LAST_REFRESH: Date.now(),
@@ -566,6 +603,22 @@ window.matchExternal = function (customer) {
   for (const c of reg) {
     for (const nt of (c._normTerms || [])) {
       if (nt && nn.includes(nt) && nt.length > bestLen) { best = c; bestLen = nt.length; }
+    }
+  }
+  return best;
+};
+
+// ─── התאמת ספק לפי שם (שמות בת.מ. רכש = שמות מלאים/וריאנטים) → רשומה קנונית ───
+// ה-term הארוך ביותר שהוא substring מנצח. מאחד וריאנטים (גרש/גרשיים, בעמ/בע"מ) לספק אחד.
+window.matchSupplier = function (name) {
+  const reg = window.SUPPLIER_TERMS || [];
+  if (!reg.length || !name) return null;
+  const nn = _normGeneric(name);
+  if (!nn) return null;
+  let best = null, bestLen = 0;
+  for (const s of reg) {
+    for (const nt of (s._normTerms || [])) {
+      if (nt && nn.includes(nt) && nt.length > bestLen) { best = s; bestLen = nt.length; }
     }
   }
   return best;

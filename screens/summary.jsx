@@ -813,6 +813,75 @@ const Monthly = ({ activeBranch = 'both' }) => {
         </div>
       </Card>
 
+      {/* ─── רכש וחבות לפי ספק — תזרים: כמה לשלם לכל ספק ומתי (לחודש הנבחר האחרון) ─── */}
+      {(() => {
+        const cur = sel[sel.length - 1];
+        if (!cur) return null;
+        const rows = ((window.SUPPLIER_PURCHASES?.byMonth) || {})[cur.month] || [];
+        const [yy, mm] = String(cur.month).split('-').map(Number);
+        const monthEnd = new Date(yy, mm, 0);   // יום אחרון של החודש (mm 1-מבוסס → אינדקס JS = החודש הבא, יום 0)
+        const payDate = (d) => { const x = new Date(monthEnd); x.setDate(x.getDate() + d); return x.toLocaleDateString('he-IL'); };
+        // קיבוץ לפי ספק מותאם (matchSupplier) — מאחד שמות מלאים/וריאנטים לרשומה קנונית.
+        // לא-מותאם נשאר בשם הגולמי ומסומן ❓ (הוסף מילת-זיהוי בהגדרות כדי לאחד).
+        const groups = {};
+        rows.forEach((r) => {
+          const m = window.matchSupplier && window.matchSupplier(r.supplier);
+          const key = m ? m.name : r.supplier;
+          const g = groups[key] || (groups[key] = { name: key, matched: !!m, days: m ? m.payment_terms_days : 30, incl: 0, mik: 0, koc: 0 });
+          g.incl += r.amount_incl; g.mik += r.incl_mikado; g.koc += r.incl_kochav;
+        });
+        const grouped = Object.keys(groups).map((k) => groups[k]).sort((a, b) => b.incl - a.incl);
+        const tot = grouped.reduce((a, g) => ({ incl: a.incl + g.incl, mik: a.mik + g.mik, koc: a.koc + g.koc }), { incl: 0, mik: 0, koc: 0 });
+        const numS = { textAlign: 'end', fontVariantNumeric: 'tabular-nums' };
+        return (
+          <Card title={`💸 רכש וחבות לפי ספק · ${cur.m}`} sub="כמה לשלם לכל ספק + תאריך תשלום צפוי (סוף חודש + תנאי תשלום) · כולל מע״מ">
+            {grouped.length ? (
+              <div className="table-wrap">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>ספק</th>
+                      <th style={{ textAlign: 'end' }}>מיקדו</th>
+                      <th style={{ textAlign: 'end' }}>כוכב</th>
+                      <th style={{ textAlign: 'end' }}>לתשלום (כולל מע״מ)</th>
+                      <th style={{ textAlign: 'center' }}>תנאי</th>
+                      <th style={{ textAlign: 'end' }}>תאריך תשלום צפוי</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grouped.map((g) => (
+                      <tr key={`sp-${g.name}`}>
+                        <td style={{ fontWeight: 700 }}>{g.name}</td>
+                        <td style={{ ...numS, color: g.mik > 0 ? 'var(--ink-1)' : 'var(--ink-3)' }}>{g.mik > 0 ? `₪${Math.round(g.mik).toLocaleString('he-IL')}` : '—'}</td>
+                        <td style={{ ...numS, color: g.koc > 0 ? 'var(--ink-1)' : 'var(--ink-3)' }}>{g.koc > 0 ? `₪${Math.round(g.koc).toLocaleString('he-IL')}` : '—'}</td>
+                        <td style={{ ...numS, fontWeight: 800, color: 'var(--danger)' }}>₪{Math.round(g.incl).toLocaleString('he-IL')}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          {g.matched
+                            ? <span className="badge">שוטף {g.days}</span>
+                            : <span className="badge warn" style={{ cursor: 'pointer' }} title="הגדר ספק + מילת-זיהוי בהגדרות" onClick={() => window.vintrackNav && window.vintrackNav('settings')}>❓ הגדר</span>}
+                        </td>
+                        <td style={{ ...numS, color: g.matched ? 'var(--ink-1)' : 'var(--ink-3)' }}>{payDate(g.days)}</td>
+                      </tr>
+                    ))}
+                    <tr style={{ borderTop: '2px solid var(--line)', fontWeight: 800 }}>
+                      <td>סה״כ</td>
+                      <td style={numS}>₪{Math.round(tot.mik).toLocaleString('he-IL')}</td>
+                      <td style={numS}>₪{Math.round(tot.koc).toLocaleString('he-IL')}</td>
+                      <td style={{ ...numS, color: 'var(--danger)' }}>₪{Math.round(tot.incl).toLocaleString('he-IL')}</td>
+                      <td colSpan={2} />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : <div style={{ padding: 30, textAlign: 'center', color: 'var(--ink-3)' }}>אין רכש רשום לחודש זה.</div>}
+            <div className="muted" style={{ fontSize: 11, padding: 14, lineHeight: 1.5 }}>
+              💡 הסכומים <b>כולל מע״מ</b> = הסכום שמשולם בפועל לספק. תאריך תשלום צפוי = סוף החודש + תנאי התשלום.
+              <br />חודשים אחרונים מתבססים על הדוחות היומיים — ייתכן פער קל מול "רכש סחורה" ב-P&L עד עדכון קובץ ההיסטוריה.
+            </div>
+          </Card>
+        );
+      })()}
+
       {/* ─── רווח אמיתי — לחודש הנבחר האחרון (=הנוכחי בדרך כלל) ─── */}
       {(() => {
         const cur = sel[sel.length - 1];

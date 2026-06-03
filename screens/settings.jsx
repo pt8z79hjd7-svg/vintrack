@@ -398,6 +398,13 @@ const Settings = ({ activeBranch = 'both' }) => {
   const [extTermInput, setExtTermInput] = useState('');
   const [extBusy, setExtBusy] = useState(false);
 
+  // ─── ניהול תנאי תשלום לספקים (טבלת suppliers, PK=name) ───
+  const _BLANK_SUP = { name: '', payment_terms_days: 30, match_terms: [], notes: '', active: true };
+  const [editingSupName, setEditingSupName] = useState(null);   // null = ספק חדש; אחרת שם הספק בעריכה
+  const [supForm, setSupForm] = useState(_BLANK_SUP);
+  const [supTermInput, setSupTermInput] = useState('');
+  const [supBusy, setSupBusy] = useState(false);
+
   const resetExtForm = () => { setEditingExtId(null); setExtForm(_BLANK_EXT); setExtTermInput(''); };
   const startEditExt = (c) => {
     setEditingExtId(c.id);
@@ -445,6 +452,57 @@ const Settings = ({ activeBranch = 'both' }) => {
     setExtBusy(false);
     if (error) { (window.toast?.error || alert)('שגיאה: ' + error.message); return; }
     setTimeout(() => window.refreshData && window.refreshData('external-toggle'), 400);
+  };
+
+  // ─── תנאי תשלום לספקים: upsert לפי name (PK). משמש גם לעריכת קיים וגם להוספת ספק שהתגלה ברכש ───
+  // match_terms = מילות-זיהוי (substring על שם הספק בת.מ. רכש, הכי-ספציפי מנצח) — מאחד וריאנטים.
+  const resetSupForm = () => { setEditingSupName(null); setSupForm(_BLANK_SUP); setSupTermInput(''); };
+  const startEditSup = (s) => {
+    setEditingSupName(s.name);
+    setSupForm({
+      name: s.name, payment_terms_days: s.payment_terms_days ?? 30,
+      match_terms: Array.isArray(s.match_terms) ? s.match_terms.slice() : [],
+      notes: s.notes || '', active: s.active !== false,
+    });
+    setSupTermInput('');
+  };
+  const addSupTerm = () => {
+    const t = supTermInput.trim();
+    if (!t) return;
+    setSupForm(v => v.match_terms.includes(t) ? v : { ...v, match_terms: [...v.match_terms, t] });
+    setSupTermInput('');
+  };
+  const removeSupTerm = (t) => setSupForm(v => ({ ...v, match_terms: v.match_terms.filter(x => x !== t) }));
+  // ספק שהתגלה ברכש ואינו מזוהה — פתח טופס חדש עם השם הגולמי כברירת-מחדל (קצר את השם/המילה לפני שמירה כדי לאחד וריאנטים).
+  const startNewSupFromRaw = (raw) => { setEditingSupName(null); setSupForm({ ..._BLANK_SUP, name: raw, match_terms: [raw] }); setSupTermInput(''); };
+  const saveSup = async () => {
+    const nm = (supForm.name || '').trim();
+    if (!nm) { (window.toast?.warn || alert)('הזן שם ספק'); return; }
+    if (!supForm.match_terms.length) { (window.toast?.warn || alert)('הוסף לפחות מילת-זיהוי אחת'); return; }
+    setSupBusy(true);
+    const payload = {
+      name: nm,
+      payment_terms_days: Number(supForm.payment_terms_days) || 30,
+      match_terms: supForm.match_terms,
+      active: supForm.active !== false,
+      notes: (supForm.notes || '').trim(),
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await window.sb.from('suppliers').upsert(payload, { onConflict: 'name' });
+    setSupBusy(false);
+    if (error) { (window.toast?.error || alert)('שמירה נכשלה: ' + error.message); return; }
+    (window.toast?.success || alert)(editingSupName ? '✓ תנאי ספק עודכנו' : '✓ ספק נוסף');
+    resetSupForm();
+    setTimeout(() => window.refreshData && window.refreshData('supplier-save'), 400);
+  };
+  const toggleSupActive = async (s) => {
+    setSupBusy(true);
+    const { error } = await window.sb.from('suppliers').upsert(
+      { name: s.name, active: !(s.active !== false), payment_terms_days: s.payment_terms_days || 30, updated_at: new Date().toISOString() },
+      { onConflict: 'name' });
+    setSupBusy(false);
+    if (error) { (window.toast?.error || alert)('שגיאה: ' + error.message); return; }
+    setTimeout(() => window.refreshData && window.refreshData('supplier-toggle'), 400);
   };
 
   return (
@@ -1111,6 +1169,143 @@ const Settings = ({ activeBranch = 'both' }) => {
               <b>משלוחים</b> (וולט/תן ביס): נמכר במחיר 0 בקופה → השווי מחושב לפי מחיר החנות, והצפי = שווי × (1−עמלה).
               <br /><b>חברה קשורה</b> (פורטונה): משלמת במחיר עלות → הצפי = עלות הסחורה. הזיהוי לפי שם הלקוח בקופה, והשורות מוחרגות ממחזור החנות.
               <br />הסטטיסטיקות (חודש) נכתבות אוטומטית בהרצת הצינור הבאה.
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* ניהול תנאי תשלום לספקים — מזין את תאריך התשלום הצפוי בכרטיס "רכש וחבות לפי ספק" בסיכום החודשי */}
+      <Card title="🏢 תנאי תשלום לספקים" sub="ימי שוטף לכל ספק → תאריך תשלום צפוי בתזרים. מילות-זיהוי מאחדות שמות מלאים/וריאנטים. ספק ברכש שלא זוהה מסומן ❓">
+        <div style={{ padding: 18 }}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>ספק</th>
+                  <th style={{ textAlign: 'center' }}>תנאי תשלום</th>
+                  <th>מילות-זיהוי</th>
+                  <th style={{ textAlign: 'end' }}>רכש מצטבר (כולל מע״מ)</th>
+                  <th style={{ textAlign: 'center' }}>פעיל</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  // ספקים מנוהלים (array). רכש מצטבר מקובץ לפי matchSupplier — וריאנטים מתאחדים לרשומה קנונית.
+                  const supList = window.SUPPLIER_TERMS || [];
+                  const _seen = {}, _unmatched = {};
+                  ((window.SUPPLIER_PURCHASES?.all) || []).forEach(r => {
+                    const m = window.matchSupplier && window.matchSupplier(r.supplier);
+                    if (m) _seen[m.name] = (_seen[m.name] || 0) + r.amount_incl;
+                    else _unmatched[r.supplier] = (_unmatched[r.supplier] || 0) + r.amount_incl;
+                  });
+                  const knownRows = supList.map(s => ({
+                    name: s.name, payment_terms_days: s.payment_terms_days, match_terms: s.match_terms || [],
+                    active: s.active, notes: s.notes, seen: _seen[s.name] || 0, known: true,
+                  }));
+                  const unknownRows = Object.keys(_unmatched).map(name => ({ name, match_terms: [], seen: _unmatched[name], known: false }));
+                  const supRows = knownRows.concat(unknownRows).sort((a, b) => (b.seen - a.seen) || a.name.localeCompare(b.name, 'he'));
+                  if (!supRows.length) return <tr><td colSpan="6" style={{ textAlign: 'center', padding: 20, color: 'var(--ink-3)' }}>אין ספקים — הוסף למטה (או הרץ את ה-SQL)</td></tr>;
+                  return supRows.map(s => (
+                    <tr key={s.name} style={editingSupName === s.name ? { background: 'var(--accent-soft)' } : {}}>
+                      <td style={{ fontWeight: 600 }}>{s.name}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        {s.known
+                          ? <span className="badge">שוטף {s.payment_terms_days}</span>
+                          : <span className="badge warn">❓ לא מזוהה</span>}
+                      </td>
+                      <td style={{ fontSize: 11 }}>
+                        {s.match_terms.length
+                          ? <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{s.match_terms.map(t => <span key={t} className="badge" style={{ fontSize: 10 }}>{t}</span>)}</span>
+                          : <span style={{ color: 'var(--ink-3)' }}>—</span>}
+                      </td>
+                      <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>{s.seen > 0 ? `₪${Math.round(s.seen).toLocaleString('he-IL')}` : '—'}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        {s.known ? <span className={`badge ${s.active ? 'ok' : ''}`}>{s.active ? 'כן' : 'לא'}</span> : <span className="muted" style={{ fontSize: 11 }}>—</span>}
+                      </td>
+                      <td style={{ textAlign: 'end' }}>
+                        {s.known ? (
+                          <>
+                            <button className="btn btn-sm btn-ghost" onClick={() => startEditSup(s)} disabled={supBusy}>ערוך</button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => toggleSupActive(s)} disabled={supBusy}
+                                    style={{ color: s.active ? 'var(--danger)' : 'var(--ok)' }}>
+                              {s.active ? 'השבת' : 'הפעל'}
+                            </button>
+                          </>
+                        ) : (
+                          <button className="btn btn-sm btn-ghost" onClick={() => startNewSupFromRaw(s.name)} disabled={supBusy}>➕ הגדר ספק</button>
+                        )}
+                      </td>
+                    </tr>
+                  ));
+                })()}
+              </tbody>
+            </table>
+          </div>
+
+          {/* טופס הוספה/עריכה */}
+          <div style={{ marginTop: 16, padding: 14, background: 'var(--surface-2, rgba(0,0,0,0.03))', borderRadius: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>
+              {editingSupName ? `✏ עריכת תנאי ${editingSupName}` : '+ ספק חדש'}
+            </div>
+            <div className="row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>שם ספק *</div>
+                <input className="input" value={supForm.name} disabled={!!editingSupName}
+                       onChange={e => setSupForm(v => ({ ...v, name: e.target.value }))}
+                       style={{ width: 180, padding: '6px 8px' }} />
+              </div>
+              <div>
+                <div className="muted" style={{ fontSize: 11 }}>שוטף (ימים)</div>
+                <input className="input" type="number" step="1" min="0" value={supForm.payment_terms_days}
+                       onChange={e => setSupForm(v => ({ ...v, payment_terms_days: e.target.value }))}
+                       style={{ width: 90, padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 160 }}>
+                <div className="muted" style={{ fontSize: 11 }}>הערות</div>
+                <input className="input" value={supForm.notes}
+                       onChange={e => setSupForm(v => ({ ...v, notes: e.target.value }))}
+                       placeholder="לא חובה"
+                       style={{ width: '100%', padding: '6px 8px' }} />
+              </div>
+              <label className="row" style={{ gap: 6, cursor: 'pointer', alignItems: 'center', padding: '6px 0' }}>
+                <input type="checkbox" checked={supForm.active !== false}
+                       onChange={e => setSupForm(v => ({ ...v, active: e.target.checked }))} />
+                <span style={{ fontSize: 12 }}>פעיל</span>
+              </label>
+            </div>
+
+            {/* מילות זיהוי (chips) — substring על שם הספק בת.מ. רכש; הכי-ספציפי מנצח. קצר את השם המלא למילה ייחודית לאיחוד וריאנטים. */}
+            <div style={{ marginTop: 12 }}>
+              <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>מילות-זיהוי * (substring על שם הספק ברכש — קצר ל"אספיריט"/"טמפו" לאיחוד וריאנטים)</div>
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                {supForm.match_terms.map(t => (
+                  <span key={t} className="badge ok" style={{ fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {t}
+                    <span onClick={() => removeSupTerm(t)} style={{ cursor: 'pointer', fontWeight: 700 }}>×</span>
+                  </span>
+                ))}
+                <input className="input" value={supTermInput}
+                       onChange={e => setSupTermInput(e.target.value)}
+                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSupTerm(); } }}
+                       placeholder="הקלד + Enter"
+                       style={{ width: 140, padding: '6px 8px' }} />
+                <button className="btn btn-sm btn-ghost" onClick={addSupTerm}>+ הוסף מילה</button>
+              </div>
+            </div>
+
+            <div className="row" style={{ gap: 10, marginTop: 14, alignItems: 'center' }}>
+              <button className="btn btn-primary" onClick={saveSup} disabled={supBusy}>
+                {supBusy ? '...שומר' : (editingSupName ? 'עדכן' : 'הוסף')}
+              </button>
+              {editingSupName && (
+                <button className="btn btn-ghost" onClick={resetSupForm} disabled={supBusy}>ביטול</button>
+              )}
+            </div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 12, lineHeight: 1.5 }}>
+              💡 <b>שוטף 30/60</b> = תשלום 30/60 יום אחרי סוף החודש. הטבלה הזו מנוהלת מהאפליקציה בלבד — הצינור לא דורס אותה.
+              <br /><b>מילות-זיהוי</b> מאחדות שמות מלאים ווריאנטים (גרש/גרשיים, בע״מ/בעמ) לספק אחד — לכן שורות "❓ לא מזוהה" מתאחדות ברגע שמוסיפים מילה.
+              <br />הרכש עצמו (כמה וממי) מחושב אוטומטית מהדוחות; כאן רק קובעים <b>מתי</b> משלמים.
             </div>
           </div>
         </div>
