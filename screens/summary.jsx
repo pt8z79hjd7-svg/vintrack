@@ -631,6 +631,16 @@ const Monthly = ({ activeBranch = 'both' }) => {
   const [detail, setDetail] = useState(curIdx);
   const detailIdx = Math.min(detail, Math.max(0, all.length - 1));
   const curM = all[detailIdx] || null;
+  // אם MONTHLY עוד ריק בעת ה-mount (hard-refresh ישירות למסך החודשי) — אתחל פעם אחת כשהדאטה מגיע,
+  // אחרת to/detail נתקעים על 0 (חודש ישן/טווח ריק). לא דורס בחירה ידנית בריענונים הבאים.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!seeded.current && all.length > 0) {
+      seeded.current = true;
+      setTo(all.length - 1);
+      setDetail(curIdx);
+    }
+  }, [all.length]);
   // לפי בורר הסניף — הגרף מציג את העמודה הרלוונטית בלבד
   const keys = activeBranch === 'mikado' ? ['mikado']
              : activeBranch === 'kohav'  ? ['kohav']
