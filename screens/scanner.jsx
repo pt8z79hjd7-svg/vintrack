@@ -21,9 +21,12 @@ const ScannerModal = ({ onClose, onFound, onAdd }) => {
       p = P.find(x => x.parallel && (x.parallel.sku === code || x.parallel.sku === norm));
       if (p) usedParallel = true;
     }
-    // חפש ב-extra_barcodes
+    // חפש ב-extra (ברקודים משניים של מוצרים שמוזגו) — eb הוא אובייקט {barcode, name, ...}
     if (!p) {
-      p = P.find(x => (x.extra_barcodes || []).some(eb => eb === code || eb === norm));
+      p = P.find(x => (x.extra || []).some(eb => {
+        const ebn = String(eb.barcode || '').replace(/^0+/, '') || '0';
+        return eb.barcode === code || ebn === norm;
+      }));
     }
     // ניסיון נוסף: הוסף/הסר אפסים מובילים
     if (!p) {

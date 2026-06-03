@@ -430,10 +430,18 @@ async function loadAllData() {
   finRows.forEach((r) => { if (r.month) FINANCE.byMonth[r.month] = mkFin(r); });
   FINANCE.current = FINANCE.byMonth[curMonth] || mkFin({ month: curMonth });
   // צירוף רווח גולמי + הכנסות חוץ-קופה − הוצאות = רווח נטו (לחודש הנוכחי)
+  // רכש חודשי: monthly_summary.purchases (מקובץ ההיסטוריה); אם חסר (חודשים אחרונים שעדיין
+  // לא נכנסו לקובץ) → fallback לסכום supplier_purchases (נבנה מהדוחות היומיים). amount_excl = ללא מע״מ.
+  const _purchFor = (m) => {
+    if (!m) return 0;
+    if (m.purchases) return m.purchases;
+    const sp = SUPPLIER_PURCHASES.byMonth[m.month] || [];
+    return sp.reduce((a, r) => a + (r.amount_excl || 0), 0);
+  };
   const _curM = MONTHLY.find((x) => x.current) || null;
   FINANCE.current.grossProfit = _curM ? _curM.profit : 0;
   FINANCE.current.revenue = _curM ? _curM.total : 0;
-  FINANCE.current.purchases = _curM ? (_curM.purchases || 0) : 0;
+  FINANCE.current.purchases = _purchFor(_curM);
   function _recalcPL(fin) {
     fin.netProfit = fin.grossProfit + fin.totalIncome - fin.totalExpense;
     fin.netMargin = fin.revenue > 0 ? (fin.netProfit / fin.revenue) * 100 : 0;
@@ -444,7 +452,7 @@ async function loadAllData() {
   // P&L לכל חודש ב-byMonth
   MONTHLY.forEach(function(m) {
     const fm = FINANCE.byMonth[m.month];
-    const purch = m.purchases || 0;
+    const purch = _purchFor(m);
     const inc = fm ? fm.totalIncome : 0;
     const exp = fm ? fm.totalExpense : 0;
     m.plProfit = m.total + inc - purch - exp;
