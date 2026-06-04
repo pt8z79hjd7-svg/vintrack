@@ -370,6 +370,7 @@ async function loadAllData() {
       avg_basket: n(r.avg_basket),
       purchase_count: n(r.purchase_count),
       transfer_count: n(r.transfer_count),
+      external_clients: _jp(r.external_clients),
     };
   });
 

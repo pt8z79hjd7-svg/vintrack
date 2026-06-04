@@ -111,6 +111,10 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
   }, 0) / last7.length : 0;
   const dailyVsAvg = avg7 ? ((dailyTotal - avg7) / avg7) * 100 : 0;
 
+  // לקוחות חיצוניים (וולט/תן-ביס/פורטונה) — חשבוניות יומיות, לא נכלל במחזור החנות
+  const dailyExtClients = ((window.DAILY_DETAILS || {})[dailyKey] || {}).external_clients || [];
+  const dailyExtTotal = dailyExtClients.reduce((s, e) => s + (Number(e.expected_net) || 0), 0);
+
   // חודשי — של החודש הנוכחי
   const monthRaw = _cur;
   const monthTotal = activeBranch === 'mikado' ? monthRaw.mikado
@@ -249,6 +253,22 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
                     <div style={{ fontWeight: 700 }}><span className={`badge ${dailyRaw.margin >= TARGETS.margin ? 'ok' : 'warn'}`}>{Number(dailyRaw.margin || 0).toFixed(1)}%</span></div>
                   </div>
                 </div>
+                {dailyExtClients.length > 0 && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+                    <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                      <div className="muted" style={{ fontSize: 11 }}>📦 חשבוניות חיצוניות <span style={{ fontSize: 10 }}>(וולט/תן-ביס · לא נכלל במחזור)</span></div>
+                      <div style={{ fontWeight: 800, color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(dailyExtTotal))}</div>
+                    </div>
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      {dailyExtClients.map((ec, i) => (
+                        <div key={i} className="row" style={{ justifyContent: 'space-between', fontSize: 12.5, padding: '5px 9px', background: 'var(--surface)', borderRadius: 'var(--r-sm)' }}>
+                          <span>{ec.name} <span className="muted" style={{ fontSize: 11 }}>· {ec.qty} פריטים</span></span>
+                          <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(Math.round(Number(ec.expected_net) || 0))}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <div style={{ textAlign: 'center', padding: 30, color: 'var(--ink-3)', fontSize: 13 }}>
