@@ -1,20 +1,46 @@
 // === Main App — Wine Store Inventory Management ===
-const NAV_ITEMS = [
-  { id: 'dashboard', label: 'דשבורד',     Icon: IDashboard },
-  { id: 'inventory', label: 'מלאי',       Icon: IBox },
-  { id: 'orders',    label: 'הזמנות',     Icon: ITruck },
-  { id: 'transfers', label: 'העברות',     Icon: ITransfer },
-  { id: 'promos',    label: 'מבצעים',     Icon: ITag },
-  { id: 'sales',     label: 'מכירות',     Icon: ICoin },
+// ניווט hub-and-spoke: 5 מרכזים, כל אחד עם תת-טאבים. מחליף 12 טאבים שטוחים.
+const NAV_HUBS = [
+  { id: 'home',      label: 'בית',     Icon: IDashboard, subs: [
+    { id: 'overview', label: 'סקירה', Icon: IDashboard },
+    { id: 'daily',    label: 'יומי',  Icon: ICalendar },
+  ] },
+  { id: 'inventory', label: 'מלאי',    Icon: IBox, subs: [
+    { id: 'stock',    label: 'מלאי',          Icon: IBox },
+    { id: 'new',      label: 'מוצרים חדשים',  Icon: IPlus },
+    { id: 'analysis', label: 'ניתוח',         Icon: IPercent },
+  ] },
+  { id: 'ops',       label: 'תפעול',   Icon: ITruck, subs: [
+    { id: 'orders',    label: 'הזמנות',  Icon: ITruck },
+    { id: 'transfers', label: 'העברות',  Icon: ITransfer },
+    { id: 'promos',    label: 'מבצעים',  Icon: ITag },
+  ] },
+  { id: 'insights',  label: 'תובנות',  Icon: ITrend, subs: [
+    { id: 'monthly',   label: 'חודשי',   Icon: ITrend },
+    { id: 'sales',     label: 'מכירות',  Icon: ICoin },
+    { id: 'employees', label: 'עובדים',  Icon: IUsers },
+  ] },
+  { id: 'settings',  label: 'הגדרות',  Icon: ISettings, subs: [
+    { id: 'settings', label: 'הגדרות', Icon: ISettings },
+  ] },
 ];
-const NAV_SECONDARY = [
-  { id: 'daily',          label: 'סיכום יומי',    Icon: ICalendar },
-  { id: 'monthly',        label: 'סיכום חודשי',   Icon: ITrend },
-  { id: 'new-products',   label: 'מוצרים חדשים',  Icon: IPlus },
-  { id: 'analysis',       label: 'ניתוח וחריגות', Icon: IPercent },
-  { id: 'employee-sales', label: 'עובדים',         Icon: IUsers },
-  { id: 'settings',       label: 'הגדרות',         Icon: ISettings },
-];
+// מיפוי id-ישן (deep-links מ-TopStatsBar/dashboard/summary) → {hub, sub}. שומר שכל ניווט קיים עובד.
+const NAV_ALIAS = {
+  dashboard:        { hub: 'home',      sub: 'overview' },
+  daily:            { hub: 'home',      sub: 'daily' },
+  inventory:        { hub: 'inventory', sub: 'stock' },
+  'new-products':   { hub: 'inventory', sub: 'new' },
+  analysis:         { hub: 'inventory', sub: 'analysis' },
+  orders:           { hub: 'ops',       sub: 'orders' },
+  transfers:        { hub: 'ops',       sub: 'transfers' },
+  promos:           { hub: 'ops',       sub: 'promos' },
+  monthly:          { hub: 'insights',  sub: 'monthly' },
+  sales:            { hub: 'insights',  sub: 'sales' },
+  'employee-sales': { hub: 'insights',  sub: 'employees' },
+  settings:         { hub: 'settings',  sub: 'settings' },
+};
+const HUB_IDS = new Set(NAV_HUBS.map(h => h.id));
+const HUB_DEFAULT_SUB = Object.fromEntries(NAV_HUBS.map(h => [h.id, h.subs[0].id]));
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "accent": "#0d7377",
@@ -92,7 +118,9 @@ function TopStatsBar({ activeBranch, onNav }) {
 }
 
 function App() {
-  const [tab, setTab] = useState('dashboard');
+  const [hub, setHub] = useState('home');
+  const [subByHub, setSubByHub] = useState({ ...HUB_DEFAULT_SUB });
+  const sub = subByHub[hub];
   const [modal, setModal] = useState(null);   // { kind, product }
   const [scannerOpen, setScannerOpen] = useState(false);
   const [activeBranch, setActiveBranch] = useState('both');
@@ -120,29 +148,31 @@ function App() {
     Object.entries(preset).forEach(([k, v]) => root.style.setProperty(k, v));
   }, [t.dark, t.density, t.accent]);
 
+  // קולט hub-id (קליק על מרכז) או leaf-id ישן (deep-link) דרך NAV_ALIAS.
   const handleNav = (id) => {
-    setTab(id);
-    if (id !== 'orders') setActiveSupplier(null);
+    let targetHub, targetSub;
+    if (HUB_IDS.has(id)) { targetHub = id; targetSub = null; }       // null = שמור תת-טאב אחרון
+    else if (NAV_ALIAS[id]) { targetHub = NAV_ALIAS[id].hub; targetSub = NAV_ALIAS[id].sub; }
+    else return;
+    setHub(targetHub);
+    if (targetSub) setSubByHub(prev => prev[targetHub] === targetSub ? prev : { ...prev, [targetHub]: targetSub });
+    const landingSub = targetSub || subByHub[targetHub];
+    if (!(targetHub === 'ops' && landingSub === 'orders')) setActiveSupplier(null);
   };
-  // ניווט גלובלי — לרכיבים עמוקים שלא מקבלים onNav (למשל DailyExpanded → הגדרות)
-  useEffect(() => { window.vintrackNav = handleNav; }, []);
+  // קליק על תת-טאב בתוך ה-hub הפעיל.
+  const selectSub = (subId) => {
+    setSubByHub(prev => prev[hub] === subId ? prev : { ...prev, [hub]: subId });
+    if (!(hub === 'ops' && subId === 'orders')) setActiveSupplier(null);
+  };
+  // ניווט גלובלי — לרכיבים עמוקים שלא מקבלים onNav (למשל DailyExpanded → הגדרות). בלי deps → תמיד טרי.
+  useEffect(() => { window.vintrackNav = handleNav; });
   const handleOpen = (kind, product) => setModal({ kind, product });
   const closeModal = () => setModal(null);
 
-  const titles = {
-    dashboard: 'דשבורד',
-    inventory: 'מלאי מוצרים',
-    orders:    'הזמנות',
-    transfers: 'העברות',
-    promos:    'מבצעים',
-    sales:     'מוצרים מובילים',
-    daily:     'סיכום יומי',
-    monthly:   'סיכום חודשי',
-    analysis:          'ניתוח וחריגות',
-    'new-products':    'מוצרים חדשים',
-    'employee-sales':  'מכירות עובדים',
-    settings:          'הגדרות',
-  };
+  // תווית מסך פעיל (data-screen-label) — מתוך התת-טאב הפעיל.
+  const activeHub = NAV_HUBS.find(h => h.id === hub) || NAV_HUBS[0];
+  const activeSubObj = activeHub.subs.find(s => s.id === sub) || activeHub.subs[0];
+  const screenLabel = activeSubObj ? activeSubObj.label : activeHub.label;
 
   // חישוב badges פעם אחת
   const ordersBadge = ORDERS.filter(o => o.status !== 'completed').length;
@@ -150,12 +180,18 @@ function App() {
   const negBadge = PRODUCTS.filter(p => p.stock.mikado < 0 || p.stock.kohav < 0).length || undefined;
   const _approved = window.APPROVED_PRODUCTS || new Set();
   const newProdBadge = PRODUCTS.filter(p => !_approved.has(p.sku) && (!p.cost || p.cost <= 0 || !p.price || p.price <= 0)).length;
-  const getBadge = (id) => {
-    if (id === 'orders') return ordersBadge;
-    if (id === 'transfers') return transfersBadge;
-    if (id === 'inventory') return negBadge;
-    if (id === 'new-products') return newProdBadge;
+  // badge לפי תת-טאב; badge ל-hub = סכום הילדים (bubbling — שומר התראה במבט-על).
+  const subBadgeOf = (hubId, subId) => {
+    if (hubId === 'ops' && subId === 'orders') return ordersBadge || undefined;
+    if (hubId === 'ops' && subId === 'transfers') return transfersBadge || undefined;
+    if (hubId === 'inventory' && subId === 'stock') return negBadge || undefined;
+    if (hubId === 'inventory' && subId === 'new') return newProdBadge || undefined;
     return undefined;
+  };
+  const hubBadgeOf = (hubId) => {
+    const h = NAV_HUBS.find(x => x.id === hubId);
+    const total = h ? h.subs.reduce((s, sb) => s + (subBadgeOf(hubId, sb.id) || 0), 0) : 0;
+    return total || undefined;
   };
 
   return (
@@ -231,60 +267,67 @@ function App() {
       {/* ─── פס KPI עליון קבוע (בכל המסכים) ─── */}
       <TopStatsBar activeBranch={activeBranch} onNav={handleNav} />
 
-      {/* ─── Nav strip: primary + secondary tabs ─── */}
+      {/* ─── Nav strip: hubs row + sub-tabs pills ─── */}
       <nav className="nav-strip">
         <div className="nav-strip-row">
-          {NAV_ITEMS.map(({ id, label, Icon }) => {
-            const badge = getBadge(id);
+          {NAV_HUBS.map(({ id, label, Icon }) => {
+            const badge = hubBadgeOf(id);
             return (
-              <button key={id} className={`nav-tab ${tab === id ? 'active' : ''}`} onClick={() => handleNav(id)}>
+              <button key={id} className={`nav-tab ${hub === id ? 'active' : ''}`} onClick={() => handleNav(id)}>
                 <Icon className="icon" size={16} />
                 <span>{label}</span>
                 {badge ? <span className="badge">{badge}</span> : null}
               </button>
             );
           })}
-          <span className="nav-divider" />
-          {NAV_SECONDARY.map(({ id, label, Icon }) => {
-            const badge = getBadge(id);
-            return (
-              <button key={id} className={`nav-tab nav-tab-sec ${tab === id ? 'active' : ''}`} onClick={() => handleNav(id)}>
-                <Icon className="icon" size={16} />
-                <span>{label}</span>
-                {badge ? <span className="badge warn">{badge}</span> : null}
-              </button>
-            );
-          })}
         </div>
+        {activeHub.subs.length > 1 && (
+          <div className="nav-subtabs">
+            {activeHub.subs.map(({ id, label, Icon }) => {
+              const badge = subBadgeOf(hub, id);
+              return (
+                <button key={id} className={`subtab ${sub === id ? 'active' : ''}`} onClick={() => selectSub(id)}>
+                  <Icon size={14} />
+                  <span>{label}</span>
+                  {badge ? <span className="badge">{badge}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
-      {/* ─── Content area ─── */}
-      <main className="main-v2" data-screen-label={titles[tab]}>
+      {/* ─── Content area (hub → sub) ─── */}
+      <main className="main-v2" data-screen-label={screenLabel}>
 
-        {tab === 'dashboard' && <Dashboard onNav={handleNav} onOpen={handleOpen} activeBranch={activeBranch} />}
-        {tab === 'inventory' && <Inventory onOpen={handleOpen} onOpenScan={() => setScannerOpen(true)} activeBranch={activeBranch} />}
-        {tab === 'orders'    && (
+        {hub === 'home' && sub === 'overview' && <Dashboard onNav={handleNav} onOpen={handleOpen} activeBranch={activeBranch} />}
+        {hub === 'home' && sub === 'daily'    && <Daily activeBranch={activeBranch} onOpen={handleOpen} />}
+
+        {hub === 'inventory' && sub === 'stock'    && <Inventory onOpen={handleOpen} onOpenScan={() => setScannerOpen(true)} activeBranch={activeBranch} />}
+        {hub === 'inventory' && sub === 'new'      && <NewProducts onOpen={handleOpen} activeBranch={activeBranch} />}
+        {hub === 'inventory' && sub === 'analysis' && <Analysis activeBranch={activeBranch} onOpen={handleOpen} />}
+
+        {hub === 'ops' && sub === 'orders' && (
           activeSupplier
             ? <OrderBuilder supplierId={activeSupplier} onBack={() => setActiveSupplier(null)} activeBranch={activeBranch} />
             : <SupplierHub onSelectSupplier={(id) => setActiveSupplier(id)} activeBranch={activeBranch} />
         )}
-        {tab === 'transfers' && <Transfers activeBranch={activeBranch} onOpen={handleOpen} />}
-        {tab === 'promos'    && <Promotions activeBranch={activeBranch} />}
-        {tab === 'daily'     && <Daily activeBranch={activeBranch} onOpen={handleOpen} />}
-        {tab === 'monthly'   && <Monthly activeBranch={activeBranch} />}
-        {tab === 'analysis'      && <Analysis activeBranch={activeBranch} onOpen={handleOpen} />}
-        {tab === 'sales'         && <Sales activeBranch={activeBranch} onOpen={handleOpen} />}
-        {tab === 'new-products'   && <NewProducts onOpen={handleOpen} activeBranch={activeBranch} />}
-        {tab === 'employee-sales' && <EmployeeSales activeBranch={activeBranch} />}
-        {tab === 'settings'       && <Settings activeBranch={activeBranch} />}
+        {hub === 'ops' && sub === 'transfers' && <Transfers activeBranch={activeBranch} onOpen={handleOpen} />}
+        {hub === 'ops' && sub === 'promos'    && <Promotions activeBranch={activeBranch} />}
+
+        {hub === 'insights' && sub === 'monthly'   && <Monthly activeBranch={activeBranch} />}
+        {hub === 'insights' && sub === 'sales'     && <Sales activeBranch={activeBranch} onOpen={handleOpen} />}
+        {hub === 'insights' && sub === 'employees' && <EmployeeSales activeBranch={activeBranch} />}
+
+        {hub === 'settings' && <Settings activeBranch={activeBranch} />}
       </main>
 
-      {/* ─── Bottom nav (mobile only — secondary tabs) ─── */}
+      {/* ─── Bottom nav (mobile only — 5 hubs) ─── */}
       <nav className="nav-bottom">
-        {NAV_SECONDARY.map(({ id, label, Icon }) => {
-          const badge = getBadge(id);
+        {NAV_HUBS.map(({ id, label, Icon }) => {
+          const badge = hubBadgeOf(id);
           return (
-            <button key={id} className={`nav-bottom-item ${tab === id ? 'active' : ''}`} onClick={() => handleNav(id)}>
+            <button key={id} className={`nav-bottom-item ${hub === id ? 'active' : ''}`} onClick={() => handleNav(id)}>
               <Icon size={18} />
               <span>{label}</span>
               {badge ? <span className="badge">{badge}</span> : null}
