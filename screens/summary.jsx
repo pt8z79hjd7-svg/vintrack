@@ -947,6 +947,90 @@ const Monthly = ({ activeBranch = 'both' }) => {
         );
       })()}
 
+      {/* ─── לקוחות חיצוניים — סיכום חודשי (אגרגציה מ-DAILY_DETAILS לחודש הנבחר) ─── */}
+      {(() => {
+        const cur = curM;
+        if (!cur) return null;
+        const dd = window.DAILY_DETAILS || {};
+        const prefix = String(cur.month) + '-';
+        const agg = {};
+        Object.keys(dd).forEach((dk) => {
+          if (!dk.startsWith(prefix)) return;
+          (dd[dk].external_clients || []).forEach((ec) => {
+            const key = ec.id || ec.name;
+            const g = agg[key] || (agg[key] = {
+              name: ec.name, kind: ec.kind, commission_pct: ec.commission_pct,
+              pays_at_cost: ec.pays_at_cost, qty: 0, retail_incl: 0, cost_excl: 0, expected_net: 0, days: 0,
+            });
+            g.qty += Number(ec.qty) || 0;
+            g.retail_incl += Number(ec.retail_incl) || 0;
+            g.cost_excl += Number(ec.cost_excl) || 0;
+            g.expected_net += Number(ec.expected_net) || 0;
+            g.days += 1;
+          });
+        });
+        const rows = Object.values(agg).sort((a, b) => b.expected_net - a.expected_net);
+        if (!rows.length) return null;
+        const tot = rows.reduce((a, g) => ({
+          qty: a.qty + g.qty, retail: a.retail + g.retail_incl,
+          cost: a.cost + g.cost_excl, net: a.net + g.expected_net,
+        }), { qty: 0, retail: 0, cost: 0, net: 0 });
+        const numS = { textAlign: 'end', fontVariantNumeric: 'tabular-nums' };
+        return (
+          <Card title={`📦 לקוחות חיצוניים · ${cur.m}`}
+            sub={`וולט / תן-ביס / פורטונה · ${rows.length} ערוצים · לא נכלל במחזור החנות`}>
+            <div className="table-wrap">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>לקוח</th>
+                    <th style={{ textAlign: 'end' }}>ימים</th>
+                    <th style={{ textAlign: 'end' }}>יח׳</th>
+                    <th style={{ textAlign: 'end' }}>שווי קמעונאי ({_vatLbl()})</th>
+                    <th style={{ textAlign: 'end' }}>עלות סחורה</th>
+                    <th style={{ textAlign: 'end' }}>צפי כניסה</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((g, i) => {
+                    const isRel = g.kind === 'related' || g.pays_at_cost;
+                    return (
+                      <tr key={i}>
+                        <td style={{ fontWeight: 500 }}>
+                          {g.name}
+                          <span style={{ marginInlineStart: 6, fontSize: 11, padding: '1px 6px', borderRadius: 6,
+                            background: isRel ? 'var(--warn-bg, #fef3c7)' : 'var(--accent-bg, #e0f2fe)',
+                            color: isRel ? 'var(--warn, #b45309)' : 'var(--accent, #0369a1)' }}>
+                            {isRel ? 'עלות' : `עמלה ${Math.round(g.commission_pct || 0)}%`}
+                          </span>
+                        </td>
+                        <td style={numS}>{g.days}</td>
+                        <td style={numS}>{g.qty}</td>
+                        <td style={numS}>₪{Math.round(g.retail_incl).toLocaleString('he-IL')}</td>
+                        <td style={{ ...numS, color: 'var(--ink-2)' }}>₪{Math.round(g.cost_excl).toLocaleString('he-IL')}</td>
+                        <td style={{ ...numS, fontWeight: 600 }}>₪{Math.round(g.expected_net).toLocaleString('he-IL')}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr style={{ borderTop: '2px solid var(--line)', fontWeight: 800 }}>
+                    <td>סה״כ</td>
+                    <td />
+                    <td style={numS}>{tot.qty}</td>
+                    <td style={numS}>₪{Math.round(tot.retail).toLocaleString('he-IL')}</td>
+                    <td style={numS}>₪{Math.round(tot.cost).toLocaleString('he-IL')}</td>
+                    <td style={{ ...numS, color: 'var(--ok)' }}>₪{Math.round(tot.net).toLocaleString('he-IL')}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div className="muted" style={{ fontSize: 11, padding: 14, lineHeight: 1.5 }}>
+              💡 "צפי כניסה" = הכסף שנכנס בפועל: משלוחים (וולט/תן-ביס) = שווי קמעונאי פחות עמלה; פורטונה = לפי עלות.
+              נסרק מהפירוט היומי — דורש הרצת הצינור/backfill לימים חדשים.
+            </div>
+          </Card>
+        );
+      })()}
+
       {/* ─── רווח אמיתי — לחודש הנבחר ─── */}
       {(() => {
         const cur = curM;
