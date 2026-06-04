@@ -956,9 +956,8 @@ const Monthly = ({ activeBranch = 'both' }) => {
         const otherExp = (Number(finRow.rent) || 0) + (Number(finRow.electricity) || 0)
                         + (Number(finRow.water) || 0) + (Number(finRow.arnona) || 0)
                         + (Number(finRow.management) || 0) + (Number(finRow.other_expense) || 0);
-        // עלות שכר — מחושבת מהשעות (אם יש), אחרת מהשדה הידני
-        const payroll = (window.totalPayrollForMonth ? window.totalPayrollForMonth(cur.month) : { total: 0, withHours: 0 });
-        const salaries = payroll.withHours > 0 ? payroll.total : (Number(finRow.salaries) || 0);
+        // עלות שכר — מהשדה הידני (עד שנמשוך שעות עובדים). otherExp + salaries = finRow.totalExpense של טבלת P&L.
+        const salaries = Number(finRow.salaries) || 0;
         const gross = cur.profit || 0;
         const net = gross + ext - otherExp - salaries;
         const margin = cur.total > 0 ? (net / cur.total) * 100 : 0;
@@ -980,13 +979,13 @@ const Monthly = ({ activeBranch = 'both' }) => {
                   ₪{Math.round(net).toLocaleString('he-IL')}
                 </div>
                 <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                  {margin.toFixed(1)}% מהמחזור{payroll.withHours > 0 ? ` · שכר מחושב מ-${payroll.withHours} עובדים` : ''}
+                  {margin.toFixed(1)}% מהמחזור
                 </div>
               </div>
               {row('רווח גולמי מהקופה', gross, 'var(--ok)')}
               {ext > 0 && row('+ הכנסות חוץ-קופה (וולט/תן-ביס/אחר)', ext, 'var(--accent-strong)')}
               {otherExp > 0 && row('− הוצאות חודשיות (שכ״ד/חשמל/ארנונה…)', -otherExp, 'var(--danger)')}
-              {salaries > 0 && row(`− עלות שכר${payroll.withHours > 0 ? ` (${payroll.withHours} עובדים)` : ''}`, -salaries, 'var(--danger)')}
+              {salaries > 0 && row('− עלות שכר', -salaries, 'var(--danger)')}
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)' }}>
                 {row('= רווח נטו', net, netOK ? 'var(--ok)' : 'var(--danger)')}
               </div>
