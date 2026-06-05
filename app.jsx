@@ -129,7 +129,8 @@ function App() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   useLiveData();                                   // re-render אוטומטי בכל refreshData
-  const lastUpdated = useLastUpdated();            // לסטטוס "עודכן לפני…"
+  const lastUpdated = useLastUpdated();            // מתי האפליקציה משכה (זמן-משיכה)
+  const dataSync = useDataSync();                  // מתי הצינור דחף נתונים (גיל-נתונים אמיתי)
   const [refreshing, setRefreshing] = useState(false);
   const [, tickClock] = useState(0);
   useEffect(() => { const id = setInterval(() => tickClock((n) => n + 1), 30000); return () => clearInterval(id); }, []);
@@ -245,10 +246,26 @@ function App() {
         </div>
 
         <div className="topbar-actions">
-          <span className="muted" title={`עודכן ב-${new Date(lastUpdated).toLocaleTimeString('he-IL')}`}
-                style={{ fontSize: 12, marginInlineEnd: 6, whiteSpace: 'nowrap' }}>
-            {refreshing ? 'מעדכן…' : `עודכן ${relTime(lastUpdated)}`}
-          </span>
+          {(() => {
+            const now = Date.now();
+            const hr = new Date(now).getHours();
+            const stale = dataSync && hr >= 9 && hr < 23 && (now - dataSync > 25 * 60000);
+            const syncTxt = dataSync
+              ? new Date(dataSync).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+              : '—';
+            const tip = `נתונים מהצינור: ${syncTxt} · רענון אפליקציה: ${new Date(lastUpdated).toLocaleTimeString('he-IL')}`
+              + (stale ? ' · ⚠ הנתונים לא התרעננו — ייתכן שהמחשב כבוי/ישן או שהצינור תקוע' : '');
+            const label = refreshing
+              ? 'מעדכן…'
+              : (dataSync ? `נתונים ${relTime(dataSync)}` : `רוענן ${relTime(lastUpdated)}`);
+            return (
+              <span className="muted" title={tip}
+                    style={{ fontSize: 12, marginInlineEnd: 6, whiteSpace: 'nowrap',
+                             color: stale ? '#d97706' : undefined }}>
+                {label}{stale ? ' ⚠' : ''}
+              </span>
+            );
+          })()}
           <button className="icon-btn" title="רענן עכשיו" onClick={doRefresh} disabled={refreshing}
                   style={{ opacity: refreshing ? 0.5 : 1 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"

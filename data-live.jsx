@@ -514,6 +514,13 @@ async function loadAllData() {
   const _aliasSet = new Set(Object.keys(_barcodeAlias));
   const PRODUCTS_FINAL = PRODUCTS.filter((p) => !_aliasSet.has(p.sku));
 
+  // גיל-נתונים אמיתי: מתי הצינור דחף לאחרונה (max products.updated_at).
+  // זה ה-heartbeat של הסנכרון — שונה מ-LAST_REFRESH (מתי האפליקציה משכה).
+  let _lastSync = 0;
+  for (const p of PRODUCTS_FINAL) {
+    if (p.updated_at) { const t = Date.parse(p.updated_at); if (t > _lastSync) _lastSync = t; }
+  }
+
   Object.assign(window, {
     BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS: PRODUCTS_FINAL, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH, INVENTORY_VALUE_TOTAL,
@@ -524,6 +531,7 @@ async function loadAllData() {
     BARCODE_ALIAS: _barcodeAlias,
     PAST_ORDERS: {}, LAST_RECEIVED: {},
     LAST_REFRESH: Date.now(),
+    LAST_DATA_SYNC: _lastSync || null,
   });
 }
 
@@ -746,8 +754,8 @@ function startRealtime() {
     }
     if (_rtRetryTimer) { clearTimeout(_rtRetryTimer); _rtRetryTimer = null; }
 
-    const tables = ['products', 'daily_summary', 'monthly_summary', 'supplier_inventory',
-                    'order_recommendations', 'transfers', 'import_deals'];
+    const tables = ['products', 'daily_summary', 'daily_details', 'monthly_summary',
+                    'supplier_inventory', 'order_recommendations', 'transfers', 'import_deals'];
     const ch = window.sb.channel('vintrack-live');
     tables.forEach((t) => ch.on('postgres_changes', { event: '*', schema: 'public', table: t },
                                 () => realtimeRefresh(t)));

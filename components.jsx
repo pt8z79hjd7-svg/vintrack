@@ -26,6 +26,19 @@ function useLastUpdated() {
 }
 window.useLastUpdated = useLastUpdated;
 
+// === useDataSync — גיל-נתונים אמיתי (max products.updated_at), לא זמן-משיכה ===
+// מחזיר epoch-ms של הדחיפה האחרונה מהצינור, או null אם לא ידוע.
+function useDataSync() {
+  const [t, setT] = useState(() => window.LAST_DATA_SYNC || null);
+  useEffect(() => {
+    const h = () => setT(window.LAST_DATA_SYNC || null);
+    window.addEventListener('vintrack:data-updated', h);
+    return () => window.removeEventListener('vintrack:data-updated', h);
+  }, []);
+  return t;
+}
+window.useDataSync = useDataSync;
+
 // === relTime — "עכשיו" / "לפני X דק׳" / "לפני X שע׳" ===
 function relTime(ts) {
   const d = Math.max(0, Date.now() - ts);
