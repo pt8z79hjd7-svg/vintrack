@@ -28,6 +28,21 @@ const Analysis = ({ activeBranch = 'both', onOpen }) => {
   ).sort((a, b) => ((b.price || 0) - (b.effective_sell_price || 0)) - ((a.price || 0) - (a.effective_sell_price || 0)))
    .slice(0, 40);
 
+  // הנחות >5% (דורש אישור) — מצטבר מ-daily_details של כל הימים הטעונים, חדש→ישן
+  const _branchHe = activeBranch === 'mikado' ? 'מיקדו' : activeBranch === 'kohav' ? 'כוכב הצפון' : null;
+  const discAnomalies = (() => {
+    const dd = window.DAILY_DETAILS || {};
+    const out = [];
+    Object.keys(dd).sort().reverse().forEach((date) => {
+      (dd[date].discount_anomalies || []).forEach((x) => {
+        if (_branchHe && x.branch !== _branchHe) return;
+        out.push({ date, name: x.name, discount_pct: x.discount_pct, discount_amt: x.discount_amt,
+          price_before: x.price_before, price_after: x.price_after, branch: x.branch, worker: x.worker, time: x.time });
+      });
+    });
+    return out.slice(0, 100);
+  })();
+
   const te = { textAlign: 'end', fontVariantNumeric: 'tabular-nums' };
   const tc = { textAlign: 'center', fontVariantNumeric: 'tabular-nums' };
 
@@ -49,7 +64,31 @@ const Analysis = ({ activeBranch = 'both', onOpen }) => {
         <div className="kpi"><div className="kpi-label">מתחת לסף</div><div className="kpi-value">{belowMin.length}</div><div className="kpi-foot">יש להזמין</div></div>
         <div className="kpi"><div className="kpi-label">מלאי תקוע</div><div className="kpi-value">{dead.length}</div><div className="kpi-foot">למבצע/החזרה</div></div>
         <div className="kpi"><div className="kpi-label">מומלץ לדחוף</div><div className="kpi-value">{push.length}</div><div className="kpi-foot">רווח גבוה + במלאי</div></div>
+        <div className="kpi"><div className="kpi-label">הנחות &gt;5%</div><div className="kpi-value">{discAnomalies.length}</div><div className="kpi-foot">דורש אישור</div></div>
       </div>
+
+      {discAnomalies.length > 0 && (
+        <Card title="🏷️ הנחות מעל 5% — דורש אישור" sub={`${discAnomalies.length} שורות · עובדים שנתנו הנחה גבוהה מ-5%`}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead><tr><th>תאריך</th><th>מוצר</th><th style={te}>הנחה</th><th style={te}>₪ הנחה</th><th style={te}>מחיר</th><th>סניף</th><th>עובד</th></tr></thead>
+              <tbody>
+                {discAnomalies.map((da, i) => (
+                  <tr key={i}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{da.date}</td>
+                    <td>{da.name}</td>
+                    <td style={{ ...te, color: da.discount_pct > 20 ? 'var(--danger)' : 'var(--warn)', fontWeight: 600 }}>{da.discount_pct}%</td>
+                    <td style={{ ...te, fontWeight: 600 }}>₪{da.discount_amt}</td>
+                    <td style={te}><span className="muted" style={{ textDecoration: 'line-through' }}>₪{da.price_before}</span>{' → '}₪{da.price_after}</td>
+                    <td>{da.branch}</td>
+                    <td>{da.worker}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <Card title="מלאי שלילי — לבדיקה" sub={`${negative.length} פריטים`}>
         <div className="table-wrap">

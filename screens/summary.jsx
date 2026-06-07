@@ -177,12 +177,20 @@ const DailyExpanded = ({ date, hasData }) => {
     </Card>
   );
 
-  const { top_sellers = [], generic_05 = [], club_discounts = [], price_anomalies = [],
+  const { top_sellers = [], generic_05 = [], club_discount_summary = {}, discount_anomalies = [], price_anomalies = [],
     new_products = [], promo_stats = {}, incoming_purchases = [], incoming_transfers = [],
     purchase_count = 0, transfer_count = 0,
     returns = [], returns_count = 0, returns_net_total = 0,
     external_clients = [] } = det;
   const promoEntries = Object.entries(promo_stats).filter(([, v]) => v > 0);
+  // הנחות מועדון — סיכום פר סניף (₪ + עסקאות)
+  const _cds = club_discount_summary || {};
+  const _clubMik = _cds.mikado || { total: 0, count: 0 };
+  const _clubKoc = _cds.kochav || _cds.kohav || { total: 0, count: 0 };
+  const _clubTot = (_clubMik.total || 0) + (_clubKoc.total || 0);
+  // חריגות הנחה >5% — מסונן לפי בורר הסניף
+  const _branchHe = activeBranch === 'mikado' ? 'מיקדו' : activeBranch === 'kohav' ? 'כוכב הצפון' : null;
+  const _discAnom = (discount_anomalies || []).filter(x => !_branchHe || x.branch === _branchHe);
 
   return (
     <>
@@ -341,15 +349,49 @@ const DailyExpanded = ({ date, hasData }) => {
         </Card>
       )}
 
-      {/* 🎫 הנחות מועדון */}
-      {club_discounts.length > 0 && (
-        <Card title="🎫 הנחות מועדון" sub={`${club_discounts.length} הנחות מעל 5%`}>
+      {/* 🎫 סיכום הנחות מועדון יין בעיר (5%) */}
+      {_clubTot > 0 && (
+        <Card title="🎫 הנחות מועדון יין בעיר" sub={`סה"כ ₪${_clubTot.toLocaleString()} הנחה ניתנה למועדון`}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>סניף</th>
+                  <th style={{ textAlign: 'end' }}>₪ הנחה</th>
+                  <th style={{ textAlign: 'end' }}>עסקאות</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeBranch !== 'kohav' && (
+                  <tr>
+                    <td>מיקדו</td>
+                    <td style={{ textAlign: 'end', fontWeight: 600 }}>₪{(_clubMik.total || 0).toLocaleString()}</td>
+                    <td style={{ textAlign: 'end' }}>{_clubMik.count || 0}</td>
+                  </tr>
+                )}
+                {activeBranch !== 'mikado' && (
+                  <tr>
+                    <td>כוכב הצפון</td>
+                    <td style={{ textAlign: 'end', fontWeight: 600 }}>₪{(_clubKoc.total || 0).toLocaleString()}</td>
+                    <td style={{ textAlign: 'end' }}>{_clubKoc.count || 0}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* 🏷️ הנחות מעל 5% — דורש אישור (חריגות) */}
+      {_discAnom.length > 0 && (
+        <Card title="🏷️ הנחות מעל 5% — דורש אישור" sub={`${_discAnom.length} שורות בהנחה גבוהה מ-5%`}>
           <div className="table-wrap">
             <table className="tbl">
               <thead>
                 <tr>
                   <th>מוצר</th>
                   <th style={{ textAlign: 'end' }}>הנחה</th>
+                  <th style={{ textAlign: 'end' }}>₪ הנחה</th>
                   <th style={{ textAlign: 'end' }}>מחיר</th>
                   <th>סניף</th>
                   <th>עובד</th>
@@ -357,19 +399,20 @@ const DailyExpanded = ({ date, hasData }) => {
                 </tr>
               </thead>
               <tbody>
-                {club_discounts.map((cd, i) => (
+                {_discAnom.map((da, i) => (
                   <tr key={i}>
-                    <td>{cd.name}</td>
-                    <td style={{ textAlign: 'end', color: cd.discount_pct > 20 ? 'var(--danger)' : 'var(--warn)', fontWeight: 600 }}>
-                      {cd.discount_pct}%
+                    <td>{da.name}</td>
+                    <td style={{ textAlign: 'end', color: da.discount_pct > 20 ? 'var(--danger)' : 'var(--warn)', fontWeight: 600 }}>
+                      {da.discount_pct}%
                     </td>
+                    <td style={{ textAlign: 'end', fontWeight: 600 }}>₪{da.discount_amt}</td>
                     <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>
-                      <span className="muted" style={{ textDecoration: 'line-through' }}>₪{cd.price_before}</span>
-                      {' → '}₪{cd.price_after}
+                      <span className="muted" style={{ textDecoration: 'line-through' }}>₪{da.price_before}</span>
+                      {' → '}₪{da.price_after}
                     </td>
-                    <td>{cd.branch}</td>
-                    <td>{cd.worker}</td>
-                    <td>{cd.time}</td>
+                    <td>{da.branch}</td>
+                    <td>{da.worker}</td>
+                    <td>{da.time}</td>
                   </tr>
                 ))}
               </tbody>
@@ -604,7 +647,7 @@ const DailyExpanded = ({ date, hasData }) => {
       )}
 
       {/* אם הכל ריק */}
-      {top_sellers.length === 0 && generic_05.length === 0 && club_discounts.length === 0
+      {top_sellers.length === 0 && generic_05.length === 0 && _discAnom.length === 0 && _clubTot === 0
         && price_anomalies.length === 0 && new_products.length === 0 && promoEntries.length === 0
         && incoming_purchases.length === 0 && incoming_transfers.length === 0
         && external_clients.length === 0 && (
@@ -738,6 +781,36 @@ const Monthly = ({ activeBranch = 'both' }) => {
                       </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        );
+      })()}
+
+      {/* 🎫 הנחות מועדון יין בעיר — סיכום חודשי (מ-daily_details של החודש הנבחר) */}
+      {(() => {
+        if (!curM) return null;
+        const dd = window.DAILY_DETAILS || {};
+        let mk = 0, kc = 0, cmk = 0, ckc = 0;
+        Object.keys(dd).forEach((dt) => {
+          if (dt.slice(0, 7) !== curM.month) return;
+          const s = dd[dt].club_discount_summary || {};
+          const m = s.mikado || {}, k = s.kochav || s.kohav || {};
+          mk += m.total || 0; cmk += m.count || 0;
+          kc += k.total || 0; ckc += k.count || 0;
+        });
+        const showMik = activeBranch !== 'kohav', showKoc = activeBranch !== 'mikado';
+        const tot = (showMik ? mk : 0) + (showKoc ? kc : 0);
+        if (tot <= 0) return null;
+        return (
+          <Card title="🎫 הנחות מועדון יין בעיר — חודשי" sub={`${curM.m} · סה"כ ₪${tot.toLocaleString('he-IL')} הנחה למועדון`}>
+            <div className="table-wrap">
+              <table className="tbl">
+                <thead><tr><th>סניף</th><th style={{ textAlign: 'end' }}>₪ הנחה</th><th style={{ textAlign: 'end' }}>עסקאות</th></tr></thead>
+                <tbody>
+                  {showMik && <tr><td>מיקדו</td><td style={{ textAlign: 'end', fontWeight: 600 }}>₪{mk.toLocaleString('he-IL')}</td><td style={{ textAlign: 'end' }}>{cmk}</td></tr>}
+                  {showKoc && <tr><td>כוכב הצפון</td><td style={{ textAlign: 'end', fontWeight: 600 }}>₪{kc.toLocaleString('he-IL')}</td><td style={{ textAlign: 'end' }}>{ckc}</td></tr>}
                 </tbody>
               </table>
             </div>

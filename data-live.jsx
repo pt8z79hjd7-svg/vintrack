@@ -355,7 +355,8 @@ async function loadAllData() {
     DAILY_DETAILS[r.summary_date] = {
       top_sellers: _jp(r.top_sellers),
       generic_05: _jp(r.generic_05),
-      club_discounts: _jp(r.club_discounts),
+      club_discount_summary: typeof r.club_discount_summary === 'string' ? JSON.parse(r.club_discount_summary || '{}') : (r.club_discount_summary || {}),
+      discount_anomalies: _jp(r.discount_anomalies),
       price_anomalies: _jp(r.price_anomalies),
       new_products: _jp(r.new_products),
       promo_stats: typeof r.promo_stats === 'string' ? JSON.parse(r.promo_stats || '{}') : (r.promo_stats || {}),
