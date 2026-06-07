@@ -14,6 +14,9 @@ const n = (x) => Number(x) || 0;
 // ─── נרמול עברי לפריטים כלליים (05) — זהה ל-norm_he ב-generic_match.py ───
 // lowercase, הסרת ו/י, הסרת כל רווח. חייב להישאר מסונכרן עם צד ה-Python.
 const _normGeneric = (s) => String(s || '').toLowerCase().replace(/[וי]/g, '').replace(/\s+/g, '');
+// נרמול לקוחות-חיצוניים: lowercase + הסרת רווחים בלבד. ⚠️ לא מסירים ו/י! (זהה ל-external_match.norm_he ב-Python).
+// בעבר השתמשנו ב-_normGeneric ש'וולט'→'לט' תפס פלטר/אלטמן/ליטאי — באג שהחריג מכירות אמיתיות.
+const _normExt = (s) => String(s || '').toLowerCase().replace(/\s+/g, '');
 const _COOLING_WORDS = ['קירור', 'קר', 'מקרר', 'קרה', 'קרר'];
 
 // ─── זיהוי גודל אריזה לבירות מתוך שם המוצר ───
@@ -223,7 +226,7 @@ async function loadAllData() {
     let terms = c.match_terms || [];
     if (typeof terms === 'string') { try { terms = JSON.parse(terms); } catch { terms = []; } }
     if (!Array.isArray(terms)) terms = [];
-    const _normTerms = terms.map((t) => _normGeneric(t)).filter(Boolean);
+    const _normTerms = terms.map((t) => _normExt(t)).filter(Boolean);
     return {
       id: c.id, name: c.name, match_terms: terms, _normTerms,
       kind: c.kind || 'delivery',
@@ -615,7 +618,7 @@ window.matchGeneric = function (name) {
 window.matchExternal = function (customer) {
   const reg = window.EXTERNAL_CLIENTS || [];
   if (!reg.length || !customer) return null;
-  const nn = _normGeneric(customer);
+  const nn = _normExt(customer);
   if (!nn) return null;
   let best = null, bestLen = 0;
   for (const c of reg) {
