@@ -159,11 +159,13 @@ function App() {
     if (targetSub) setSubByHub(prev => prev[targetHub] === targetSub ? prev : { ...prev, [targetHub]: targetSub });
     const landingSub = targetSub || subByHub[targetHub];
     if (!(targetHub === 'ops' && landingSub === 'orders')) setActiveSupplier(null);
+    window.refreshOnNav && window.refreshOnNav();   // רענון נתונים בכל מעבר דף/האב
   };
   // קליק על תת-טאב בתוך ה-hub הפעיל.
   const selectSub = (subId) => {
     setSubByHub(prev => prev[hub] === subId ? prev : { ...prev, [hub]: subId });
     if (!(hub === 'ops' && subId === 'orders')) setActiveSupplier(null);
+    window.refreshOnNav && window.refreshOnNav();   // רענון נתונים בכל מעבר תת-טאב
   };
   // ניווט גלובלי — לרכיבים עמוקים שלא מקבלים onNav (למשל DailyExpanded → הגדרות). בלי deps → תמיד טרי.
   useEffect(() => { window.vintrackNav = handleNav; });

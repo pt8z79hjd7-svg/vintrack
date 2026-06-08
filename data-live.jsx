@@ -722,67 +722,10 @@ window.addEventListener('focus', () => {
   if (Date.now() - _lastLoadAt > 20000) refreshData('focus');
 });
 
-// 2) רענון רקע כל 90 שניות (רק כשהטאב גלוי)
-setInterval(() => {
-  if (document.visibilityState === 'visible') refreshData('interval');
-}, 90000);
-
-// 3) Supabase realtime — אם הטבלאות משתנות בצד שרת, נקבל דחיפה ונרענן מיד
-// ⚠ throttle: לא יותר מrefresh אחד כל 8 שניות, גם אם 1,000 שינויים נכנסים בבת אחת
-let _rtLastRefresh = 0;
-let _rtDebounce = null;
-function realtimeRefresh(table) {
-  const since = Date.now() - _rtLastRefresh;
-  if (since < 8000) {
-    // יותר מדי events בבת אחת — דחה ל-8 שניות, אבל רק פעם אחת
-    if (_rtDebounce) return;
-    _rtDebounce = setTimeout(() => {
-      _rtDebounce = null;
-      _rtLastRefresh = Date.now();
-      refreshData('realtime:throttled');
-    }, 8000 - since);
-    return;
-  }
-  _rtLastRefresh = Date.now();
-  refreshData('realtime:' + table);
-}
-
-let _rtRetryTimer = null;
-function startRealtime() {
-  try {
-    if (!window.sb) return;
-    // ניקוי ערוץ קודם אם קיים — מונע דליפת ערוצים בריצות חוזרות
-    if (window._vtChannel) {
-      try { window._vtChannel.unsubscribe(); } catch (_) {}
-      window._vtChannel = null;
-    }
-    if (_rtRetryTimer) { clearTimeout(_rtRetryTimer); _rtRetryTimer = null; }
-
-    const tables = ['products', 'daily_summary', 'daily_details', 'monthly_summary',
-                    'supplier_inventory', 'order_recommendations', 'transfers', 'import_deals'];
-    const ch = window.sb.channel('vintrack-live');
-    tables.forEach((t) => ch.on('postgres_changes', { event: '*', schema: 'public', table: t },
-                                () => realtimeRefresh(t)));
-    ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'additional_income' }, (payload) => {
-      const row = payload?.old;
-      if (row?.month === '__SYNC_REQUEST__') {
-        console.log('[VinTrack] sync done by worker — refreshing');
-        if (window.toast) window.toast.success('✓ דוח טרי הורד — מתעדכן…');
-        setTimeout(() => refreshData('post-worker'), 1500);
-      }
-    });
-    ch.subscribe((status) => {
-      console.log('[VinTrack] realtime status:', status);
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-        // רק timer אחד פעיל בכל זמן — לא יוצרים מקבילים
-        if (_rtRetryTimer) return;
-        _rtRetryTimer = setTimeout(() => { _rtRetryTimer = null; startRealtime(); }, 5000);
-      }
-    });
-    window._vtChannel = ch;
-  } catch (e) { console.warn('realtime לא זמין:', e?.message); }
-}
-// מחכה ש-sb יהיה זמין
-const _rtTry = setInterval(() => {
-  if (window.sb) { clearInterval(_rtTry); startRealtime(); }
-}, 300);
+// 2) רענון בניווט — נקרא מ-app.jsx בכל מעבר דף/האב.
+// אין יותר polling-רקע ואין Realtime — כדי לא לבזבז שימוש (Supabase) כשלא נכנסים לאפליקציה.
+// מודל: רענון בכניסה (visibilitychange/focus למעלה) + בכל ניווט. throttle קל למניעת ספאם בלחיצות רצופות.
+window.refreshOnNav = function () {
+  if (Date.now() - _lastLoadAt < 3000) return;   // נטען זה עתה — דלג כדי לא לכפול
+  refreshData('nav');
+};
