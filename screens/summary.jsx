@@ -159,13 +159,13 @@ const Daily = ({ activeBranch = 'both', onOpen }) => {
       </div>
 
       {/* ─── פרטי יום מורחבים (מ-daily_details) ─── */}
-      <DailyExpanded date={date} hasData={hasData} />
+      <DailyExpanded date={date} hasData={hasData} activeBranch={activeBranch} />
     </div>
   );
 };
 
 // === DailyExpanded — מובילים, 05, הנחות, חריגות, חדשים ===
-const DailyExpanded = ({ date, hasData }) => {
+const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
   const det = (window.DAILY_DETAILS || {})[date];
 
   if (!hasData) return null;
