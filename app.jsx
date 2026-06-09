@@ -132,6 +132,45 @@ function App() {
   const lastUpdated = useLastUpdated();            // מתי האפליקציה משכה (זמן-משיכה)
   const dataSync = useDataSync();                  // מתי הצינור דחף נתונים (גיל-נתונים אמיתי)
   const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  // טריגר סנכרון מיידי עם הקופה (Pipeline Python במחשב הבעלים)
+  const requestSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const { error } = await window.sb.from('pipeline_triggers').insert({
+        requested_by: 'app',
+        status: 'pending'
+      });
+      if (error) {
+        window.toast?.err?.(`שגיאה: ${error.message}`, 4000);
+        setSyncing(false);
+        return;
+      }
+      window.toast?.info?.('🔔 בקשת סנכרון נשלחה — נתונים טריים תוך 30-60 שניות', 5000);
+      // poll: כל 10 ש' עד 90 ש' — אם dataSync מתעדכן, מודיע
+      const startSync = window.LAST_DATA_SYNC || 0;
+      let polls = 0;
+      const iv = setInterval(async () => {
+        polls++;
+        await window.refreshData?.('sync-poll');
+        const now = window.LAST_DATA_SYNC || 0;
+        if (now > startSync) {
+          window.toast?.ok?.('✓ נתונים עדכניים מהקופה', 3000);
+          clearInterval(iv);
+          setSyncing(false);
+        } else if (polls >= 9) {  // 90 שניות
+          window.toast?.warn?.('⏳ הסנכרון לוקח יותר זמן מהצפוי — בדוק שוב בעוד דקה', 5000);
+          clearInterval(iv);
+          setSyncing(false);
+        }
+      }, 10000);
+    } catch (e) {
+      window.toast?.err?.(`שגיאה: ${String(e).slice(0, 100)}`, 4000);
+      setSyncing(false);
+    }
+  };
   const [, tickClock] = useState(0);
   useEffect(() => { const id = setInterval(() => tickClock((n) => n + 1), 30000); return () => clearInterval(id); }, []);
   const doRefresh = async () => {
@@ -276,6 +315,17 @@ function App() {
               <polyline points="23 4 23 10 17 10" />
               <polyline points="1 20 1 14 7 14" />
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+          </button>
+          <button className="icon-btn" title="סנכרן עכשיו עם הקופה (מוריד נתונים טריים)"
+                  onClick={requestSync} disabled={syncing}
+                  style={{ opacity: syncing ? 0.5 : 1, color: syncing ? 'var(--warn)' : 'var(--accent-strong)' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                 style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }}>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
           </button>
           <button className="icon-btn" title="התראות"><IBell size={18} /><span className="dot" /></button>
