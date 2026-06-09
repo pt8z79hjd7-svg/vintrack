@@ -49,6 +49,12 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
   // Negative items count — לפי סניף נבחר
   const negCount = PRODUCTS.filter(branchNeg).length;
 
+  // שווי מלאי (לפי עלות, ללא מע״מ) + ספירת פריטים פעילים פר סניף
+  const inv = window.INVENTORY_VALUE_TOTAL || { value: 0, mikado: 0, kohav: 0 };
+  const activeMik = PRODUCTS.filter(p => (p.stock?.mikado || 0) > 0).length;
+  const activeKoc = PRODUCTS.filter(p => (p.stock?.kohav  || 0) > 0).length;
+  const fmt = (v) => `₪${Math.round(v || 0).toLocaleString('he-IL')}`;
+
   return (
     <div className="page">
       <div className="between">
@@ -68,6 +74,39 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
           </button>
         </div>
       </div>
+
+      {/* 💰 שווי מלאי — סכום כספי + פיצול סניפים (לפי עלות, ללא מע״מ) */}
+      <Card title="💰 שווי מלאי" sub="לפי עלות · ללא מע״מ">
+        <div style={{ padding: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+          {(activeBranch === 'both') && (
+            <div style={{ padding: 14, background: 'var(--accent-soft)', borderRadius: 10, border: '1px solid var(--line)' }}>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 4 }}>סה״כ שני סניפים</div>
+              <div style={{ fontSize: 22, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{fmt(inv.value)}</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>ללא מע״מ · {(activeMik + activeKoc).toLocaleString('he-IL')} פריטים פעילים</div>
+            </div>
+          )}
+          {(activeBranch === 'both' || activeBranch === 'mikado') && (
+            <div style={{ padding: 14, background: 'var(--surface-2)', borderRadius: 10, border: '1px solid var(--line)' }}>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 4 }}>
+                <span className="branch-dot" style={{ background: BRANCHES[0].color, display: 'inline-block', width: 8, height: 8, borderRadius: 2, marginInlineEnd: 6 }} />
+                מיקדו
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmt(inv.mikado)}</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>ללא מע״מ · {activeMik.toLocaleString('he-IL')} פריטים פעילים</div>
+            </div>
+          )}
+          {(activeBranch === 'both' || activeBranch === 'kohav') && (
+            <div style={{ padding: 14, background: 'var(--surface-2)', borderRadius: 10, border: '1px solid var(--line)' }}>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 4 }}>
+                <span className="branch-dot" style={{ background: BRANCHES[1].color, display: 'inline-block', width: 8, height: 8, borderRadius: 2, marginInlineEnd: 6 }} />
+                כוכב הצפון
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmt(inv.kohav)}</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>ללא מע״מ · {activeKoc.toLocaleString('he-IL')} פריטים פעילים</div>
+            </div>
+          )}
+        </div>
+      </Card>
 
       <Card>
         {/* Toolbar */}
@@ -137,7 +176,7 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
                 <th>ברקוד</th>
                 <th>קטגוריה</th>
                 <th>ספק</th>
-                <th style={{ textAlign: 'end' }}>מחיר צרכן</th>
+                <th style={{ textAlign: 'end' }}>מחיר צרכן<br/><span style={{ fontSize: 10, fontWeight: 400, color: 'var(--ink-3)' }}>כולל מע״מ</span></th>
                 {(activeBranch === 'both' || activeBranch === 'mikado') && (
                   <th style={{ textAlign: 'center' }}>
                     <span className="branch-dot" style={{ background: BRANCHES[0].color }} />

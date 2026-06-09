@@ -101,17 +101,17 @@ function TopStatsBar({ activeBranch, onNav }) {
         <div className="topstat-value">{fmt(Math.round(monthVal * VAT))}</div>
         <div className="topstat-sub">כולל מע״מ</div>
       </button>
-      <button className="topstat topstat-ok" onClick={() => onNav('monthly')} title="רווח גולמי — מחזור פחות עלות מכר">
+      <button className="topstat topstat-ok" onClick={() => onNav('monthly')} title="רווח גולמי — מחזור פחות עלות מכר (ללא מע״מ)">
         <div className="topstat-label">רווח גולמי</div>
         <div className="topstat-value">{fmt(monthProfit)}</div>
         <div className="topstat-sub" style={{ color: marginOK ? 'var(--ok)' : 'var(--warn)' }}>
-          מרווח {Number(cur.margin || 0).toFixed(1)}% {marginOK ? '✓' : '· יעד ' + profitTarget + '%'}
+          מרווח {Number(cur.margin || 0).toFixed(1)}% {marginOK ? '✓' : '· יעד ' + profitTarget + '%'} · ללא מע״מ
         </div>
       </button>
-      <button className="topstat topstat-accent" onClick={() => onNav('inventory')} title="ערך המלאי בחנות לפי עלות">
+      <button className="topstat topstat-accent" onClick={() => onNav('inventory')} title="ערך המלאי בחנות לפי עלות (ללא מע״מ) — לחץ לחלוקה לפי סניפים">
         <div className="topstat-label">ערך מלאי</div>
         <div className="topstat-value">{fmt(invVal)}</div>
-        <div className="topstat-sub">לפי עלות</div>
+        <div className="topstat-sub">לפי עלות · ללא מע״מ</div>
       </button>
     </div>
   );
