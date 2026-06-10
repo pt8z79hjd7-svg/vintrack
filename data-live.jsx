@@ -669,45 +669,72 @@ async function refreshData(reason = 'manual') {
 }
 window.refreshData = refreshData;
 
-// ─── requestFreshSync — מבקש מהמחשב להוריד דוח טרי מ-CashOnTab ───
-// כותב שורה ל-sync_requests; sync_worker.py על המחשב יתפוס תוך 5-10 שניות,
-// יריץ את המחזור (~30-60 שניות), ויעדכן processed_at. ה-realtime listener
-// למטה יזהה את העדכון ויקרא ל-refreshData('post-sync') אוטומטית.
-let _lastRequestAt = 0;
-async function requestFreshSync(reason = 'manual') {
-  // Throttle: לא יותר מבקשה אחת כל 30 שניות
-  if (Date.now() - _lastRequestAt < 30000) {
-    console.log('[VinTrack] בקשה נדחתה (throttle 30s)');
-    if (window.toast) window.toast.info('המתנה ~30 שניות בין בקשות');
+// ─── triggerSync — בקשה לסנכרון מהקופה (INSERT ל-pipeline_triggers) ───
+// pipeline_watchdog.py על המחשב המקומי בודק כל דקה, מריץ vintrack_quick_cycle.py
+// (~2 דק׳), ומסמן status='done'. אנחנו עושים polling זמני לראות שה-heartbeat
+// (LAST_DATA_SYNC) התעדכן, ואז מרעננים. Throttle 30s למניעת spam.
+let _lastTriggerAt = 0;
+async function triggerSync(reason = 'manual') {
+  if (Date.now() - _lastTriggerAt < 30000) {
+    console.log('[VinTrack] טריגר נדחה (throttle 30s)');
     return false;
   }
   if (!window.sb) return false;
-  _lastRequestAt = Date.now();
+  _lastTriggerAt = Date.now();
   try {
-    // משתמשים בטבלת additional_income הקיימת כתור-בקשות (חוסך SQL DDL)
-    // month='__SYNC_REQUEST__' = signal. amount = timestamp ms. ה-worker מוחק אחרי שטיפל.
-    const { error } = await window.sb.from('additional_income').insert({
-      month: '__SYNC_REQUEST__',
-      description: reason.slice(0, 100),
-      amount: Date.now(),
-      has_invoice: false,
+    const { error } = await window.sb.from('pipeline_triggers').insert({
+      requested_by: 'app:' + reason.slice(0, 30),
+      status: 'pending',
     });
     if (error) {
-      console.warn('[VinTrack] requestFreshSync נכשל:', error.message);
-      // נסיון רענון רגיל (בלי הורדה) כ-fallback
+      console.warn('[VinTrack] triggerSync נכשל:', error.message);
       refreshData('fallback-' + reason);
       return false;
     }
-    console.log('[VinTrack] בקשת הורדה נשלחה:', reason);
-    if (window.toast) window.toast.info('מוריד דוח טרי מ-CashOnTab… (30-60 שניות)', 5000);
+    console.log('[VinTrack] טריגר סנכרון נשלח:', reason);
+    if (window.toast?.info) window.toast.info('🔔 מסנכרן עם הקופה… (~2 דקות)', 5000);
+    // Polling: כל 15s במשך עד 150s — אם heartbeat התעדכן, refreshData + toast הצלחה
+    const startHB = window.LAST_DATA_SYNC || 0;
+    let polls = 0;
+    const iv = setInterval(async () => {
+      polls++;
+      await refreshData('sync-poll');
+      const nowHB = window.LAST_DATA_SYNC || 0;
+      if (nowHB > startHB) {
+        if (window.toast?.ok) window.toast.ok('✓ נתונים עדכניים מהקופה', 3000);
+        clearInterval(iv);
+      } else if (polls >= 10) {   // 150 שניות
+        if (window.toast?.warn) window.toast.warn('⏳ הסנכרון מתעכב — נסה שוב בעוד דקה', 4000);
+        clearInterval(iv);
+      }
+    }, 15000);
     return true;
   } catch (e) {
-    console.warn('[VinTrack] requestFreshSync exception:', e?.message);
+    console.warn('[VinTrack] triggerSync exception:', e?.message);
     refreshData('fallback-' + reason);
     return false;
   }
 }
-window.requestFreshSync = requestFreshSync;
+window.triggerSync = triggerSync;
+// תאימות לאחור: גם השם הישן זמין (אם משהו עוד קורא לו)
+window.requestFreshSync = triggerSync;
+
+// ─── Auto-trigger בכניסה: אם heartbeat ישן >5 דק' — סנכרון אוטומטי בלי לחיצה ───
+let _autoTriggerChecked = false;
+function maybeAutoTrigger() {
+  if (_autoTriggerChecked) return;             // פעם אחת בעמוד (לא בכל refresh)
+  const hb = window.LAST_DATA_SYNC || 0;
+  if (!hb) return;                              // אין heartbeat — אל תטריג בצורה עיוורת
+  const ageMin = (Date.now() - hb) / 60000;
+  if (ageMin > 5) {
+    _autoTriggerChecked = true;
+    console.log(`[VinTrack] heartbeat ישן (${ageMin.toFixed(1)} דק׳) — טריגר אוטומטי`);
+    triggerSync('auto-stale-on-load');
+  } else {
+    _autoTriggerChecked = true;                 // לא צריך טריגר — נתונים טריים
+  }
+}
+window.addEventListener('vintrack:data-updated', maybeAutoTrigger);
 
 // 1) חזרה לטאב = רענון (אם עברו לפחות 20 שניות מהטעינה האחרונה)
 let _lastLoadAt = Date.now();
