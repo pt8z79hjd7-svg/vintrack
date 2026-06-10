@@ -4,6 +4,7 @@ const PAGE_SIZE = 12;
 
 const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
   useLiveData();   // re-render אחרי refreshData
+  const isMobile = useIsMobile();
   const [cat, setCat] = useState('all');
   const [sup, setSup] = useState('all');
   const [stock, setStock] = useState('all');
@@ -166,7 +167,62 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Table / Mobile cards */}
+        {isMobile ? (
+          <div style={{ padding: '10px 12px' }}>
+            <MobileCardList
+              items={pageItems}
+              keyOf={(p) => p.id}
+              onTap={(p) => onOpen('detail', p)}
+              empty="לא נמצאו מוצרים. נסה לשנות פילטרים."
+              renderCard={(p) => {
+                const catLabel = CATEGORIES.find(c => c.id === p.cat)?.label || p.catLabel;
+                const supName = SUPPLIERS.find(s => s.id === p.supplier)?.name || p.supplier;
+                const totalStock = activeBranch === 'mikado' ? p.stock.mikado
+                                 : activeBranch === 'kohav'  ? p.stock.kohav
+                                 : p.stock.mikado + p.stock.kohav + (p.parallel ? p.parallel.stock.mikado + p.parallel.stock.kohav : 0);
+                const negative = branchNeg(p);
+                return (
+                  <React.Fragment>
+                    <div className="mcard-head">
+                      <div style={{ minWidth: 0 }}>
+                        <div className="mcard-title">
+                          {p.name}
+                          {p.isGeneric && <span className="parallel-pill">כללי</span>}
+                          {p.parallel && <span className="parallel-pill"><ISplit size={10} /> מקביל</span>}
+                          {p.cat === 'beer' && p.units_per_pack > 1 && <span className="parallel-pill">🍺 {p.pack_label}</span>}
+                          {negative && <span className="parallel-pill" style={{ background: 'var(--danger)', color: '#fff' }}>שלילי</span>}
+                        </div>
+                        <div className="mcard-sub">{p.sku} · {supName} · {catLabel}</div>
+                      </div>
+                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>₪{p.price.toFixed(2)}</div>
+                    </div>
+                    <div className="mcard-meta">
+                      {(activeBranch === 'both' || activeBranch === 'mikado') && (
+                        <div className="mcard-meta-item">
+                          <div className="mcard-meta-label"><span className="branch-dot" style={{ background: BRANCHES[0].color, display: 'inline-block', width: 7, height: 7, borderRadius: 2, marginInlineEnd: 4 }} />מיקדו</div>
+                          <div className="mcard-meta-value"><StockCell value={p.stock.mikado} /></div>
+                        </div>
+                      )}
+                      {(activeBranch === 'both' || activeBranch === 'kohav') && (
+                        <div className="mcard-meta-item">
+                          <div className="mcard-meta-label"><span className="branch-dot" style={{ background: BRANCHES[1].color, display: 'inline-block', width: 7, height: 7, borderRadius: 2, marginInlineEnd: 4 }} />כוכב</div>
+                          <div className="mcard-meta-value"><StockCell value={p.stock.kohav} /></div>
+                        </div>
+                      )}
+                      <div className="mcard-meta-item">
+                        <div className="mcard-meta-label">סה״כ</div>
+                        <div className="mcard-meta-value">
+                          {p.cat === 'beer' && p.units_per_pack > 1 ? `${totalStock * p.units_per_pack} בק׳ (${totalStock} ${p.pack_label})` : totalStock}
+                        </div>
+                      </div>
+                    </div>
+                  </React.Fragment>
+                );
+              }}
+            />
+          </div>
+        ) : (
         <div className="table-wrap">
           <table className="tbl tbl-inventory">
             <thead>
@@ -268,6 +324,7 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
             </tbody>
           </table>
         </div>
+        )}
 
         {/* סיכום בירות */}
         {cat === 'beer' && (() => {

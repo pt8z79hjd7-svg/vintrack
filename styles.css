@@ -1933,3 +1933,43 @@ button:focus-visible, .input:focus-visible, .select:focus-visible {
   font-size: 13.5px;
   color: var(--ink-3);
 }
+
+/* ─── עגלת הזמנה במובייל: bottom-sheet + בר מכווץ ─── */
+.cart-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 60;
+}
+.order-cart.cart-sheet {
+  position: fixed;
+  bottom: 0;
+  inset-inline: 0;
+  width: auto;
+  max-height: 82vh;
+  overflow-y: auto;
+  z-index: 61;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.22);
+}
+.cart-bar {
+  position: fixed;
+  bottom: 70px;
+  inset-inline: 10px;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 14px;
+  background: var(--accent-strong);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}

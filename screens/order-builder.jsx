@@ -216,6 +216,7 @@ const OrderBuilder = ({ supplierId, onBack }) => {
   const products = useMemo(() => PRODUCTS.filter(p => p.supplier === supplierId), [supplierId]);
   const past = PAST_ORDERS[supplierId] || [];
   const last = LAST_RECEIVED[supplierId];
+  const isMobile = useIsMobile();
 
   // qty per product id
   const [qty, setQty] = useState({});
@@ -223,6 +224,7 @@ const OrderBuilder = ({ supplierId, onBack }) => {
   const [branch, setBranch] = useState('both');
   const [exportKind, setExportKind] = useState(null); // 'whatsapp' | 'pdf' | null
   const [searchQ, setSearchQ] = useState('');
+  const [cartOpen, setCartOpen] = useState(false);   // מובייל: עגלה כ-bottom-sheet
 
   const updateQty = (id, v) => {
     const next = { ...qty };
@@ -329,6 +331,62 @@ const OrderBuilder = ({ supplierId, onBack }) => {
                 <input value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
                        placeholder="חיפוש בקטלוג של הספק…" />
               </div>
+              {isMobile ? (
+                <MobileCardList
+                  items={filledProducts}
+                  keyOf={(p) => p.id}
+                  empty="לא נמצאו מוצרים בקטלוג הספק"
+                  renderCard={(p) => {
+                    const cur = qty[p.id] || 0;
+                    const sg = suggest(p);
+                    return (
+                      <React.Fragment>
+                        <div className="mcard-head">
+                          <div style={{ minWidth: 0 }}>
+                            <div className="mcard-title">{p.name}</div>
+                            <div className="mcard-sub">{p.sku}</div>
+                          </div>
+                          <div style={{ textAlign: 'end', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>₪{p.cost.toFixed(2)}</div>
+                            {cur > 0 && (
+                              <div style={{ fontSize: 11.5, color: 'var(--accent-strong)', fontWeight: 700 }}>
+                                סה״כ ₪{(cur * p.cost).toFixed(0)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mcard-meta">
+                          <div className="mcard-meta-item">
+                            <div className="mcard-meta-label"><span className="branch-dot" style={{ background: BRANCHES[0].color, display: 'inline-block', width: 7, height: 7, borderRadius: 2, marginInlineEnd: 4 }} />מיקדו</div>
+                            <div className="mcard-meta-value">{p.stock.mikado}</div>
+                          </div>
+                          <div className="mcard-meta-item">
+                            <div className="mcard-meta-label"><span className="branch-dot" style={{ background: BRANCHES[1].color, display: 'inline-block', width: 7, height: 7, borderRadius: 2, marginInlineEnd: 4 }} />כוכב</div>
+                            <div className="mcard-meta-value">{p.stock.kohav}</div>
+                          </div>
+                          <div className="mcard-meta-item">
+                            <div className="mcard-meta-label">הצעה</div>
+                            <div className="mcard-meta-value">
+                              {sg > 0 ? (
+                                <button className="suggest-pill" onClick={() => updateQty(p.id, sg)}>+{sg}</button>
+                              ) : '—'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mcard-actions">
+                          <div className="qty-stepper" style={{ flex: 1 }}>
+                            <button onClick={() => dec(p.id)} disabled={cur === 0}>−</button>
+                            <input type="number" value={cur} min="0"
+                                   onChange={(e) => updateQty(p.id, Math.max(0, +e.target.value || 0))} />
+                            <button onClick={() => inc(p.id)}>+</button>
+                            <button className="qty-pack" onClick={() => addPack(p.id)} title="הוסף ארגז (6)">+6</button>
+                          </div>
+                        </div>
+                      </React.Fragment>
+                    );
+                  }}
+                />
+              ) : (
               <Card>
                 <table className="tbl tbl-builder">
                   <thead>
@@ -404,6 +462,7 @@ const OrderBuilder = ({ supplierId, onBack }) => {
                   </tbody>
                 </table>
               </Card>
+              )}
             </>
           )}
 
@@ -487,11 +546,20 @@ const OrderBuilder = ({ supplierId, onBack }) => {
           )}
         </div>
 
-        {/* Right: cart panel (sticky) */}
-        <div className="order-cart">
+        {/* Right: cart panel — דסקטופ: sidebar דביק · מובייל: bottom-sheet */}
+        {isMobile && cartOpen && <div className="cart-sheet-backdrop" onClick={() => setCartOpen(false)} />}
+        {(!isMobile || cartOpen) && (
+        <div className={`order-cart ${isMobile ? 'cart-sheet' : ''}`}>
           <div className="order-cart-header">
             <div style={{ fontWeight: 700, fontSize: 14 }}>סיכום הזמנה</div>
-            <Badge tone="accent">{cartItems.length} פריטים</Badge>
+            <div className="row" style={{ gap: 8 }}>
+              <Badge tone="accent">{cartItems.length} פריטים</Badge>
+              {isMobile && (
+                <button className="icon-btn" onClick={() => setCartOpen(false)} title="סגור">
+                  <IClose size={13} />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="order-cart-body">
@@ -583,6 +651,17 @@ const OrderBuilder = ({ supplierId, onBack }) => {
             </button>
           </div>
         </div>
+        )}
+
+        {/* מובייל: בר עגלה מכווץ — דביק מעל הניווט התחתון */}
+        {isMobile && !cartOpen && (
+          <button className="cart-bar" onClick={() => setCartOpen(true)}>
+            <span>🛒 {cartItems.length} פריטים · {cartUnits} יח׳</span>
+            <span style={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+              ₪{(cartTotal * 1.18).toFixed(0)} · הצג
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Export modals */}
