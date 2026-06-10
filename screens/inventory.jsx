@@ -171,7 +171,6 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
           <table className="tbl tbl-inventory">
             <thead>
               <tr>
-                <th style={{ width: 32 }}><input type="checkbox" /></th>
                 <th>מוצר</th>
                 <th>ברקוד</th>
                 <th>קטגוריה</th>
@@ -203,7 +202,6 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
                 const negative = branchNeg(p);
                 return (
                   <tr key={p.id} onClick={() => onOpen('detail', p)} className={negative ? 'row-neg' : ''}>
-                    <td onClick={(e) => e.stopPropagation()}><input type="checkbox" /></td>
                     <td>
                       <div className="row-product">
                         <div className="bottle-thumb">

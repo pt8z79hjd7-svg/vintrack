@@ -390,3 +390,49 @@ const StackedAreaChart = ({ data, series, height = 280, fmt = v => v }) => {
 };
 
 Object.assign(window, { StackedAreaChart });
+
+// ─── useIsMobile — זיהוי מסך צר (טלפון). מתעדכן חי בשינוי גודל/סיבוב ───
+function useIsMobile() {
+  const [m, setM] = useState(() => window.matchMedia('(max-width: 480px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 480px)');
+    const h = (e) => setM(e.matches);
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
+  }, []);
+  return m;
+}
+window.useIsMobile = useIsMobile;
+
+// ─── EmptyState — מצב-ריק אחיד (אייקון + טקסט + פעולה אופציונלית) ───
+function EmptyState({ icon, text, action, onAction, children }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-state-icon">{icon || '✓'}</div>
+      {text && <div className="empty-state-text">{text}</div>}
+      {children}
+      {action && <button className="btn btn-ghost" onClick={onAction}>{action}</button>}
+    </div>
+  );
+}
+window.EmptyState = EmptyState;
+
+// ─── MobileCardList — תחליף כרטיסים לטבלה במובייל ───
+// items: מערך · renderCard(item,i) → תוכן הכרטיס · onTap(item) אופציונלי ·
+// keyOf(item,i) אופציונלי · empty: טקסט כשהרשימה ריקה.
+function MobileCardList({ items, renderCard, onTap, keyOf, empty }) {
+  if (!items || !items.length) {
+    return empty ? <EmptyState text={empty} /> : null;
+  }
+  return (
+    <div className="mcard-list">
+      {items.map((it, i) => (
+        <div key={keyOf ? keyOf(it, i) : i} className={`mcard ${onTap ? 'mcard-tap' : ''}`}
+             onClick={onTap ? () => onTap(it) : undefined}>
+          {renderCard(it, i)}
+        </div>
+      ))}
+    </div>
+  );
+}
+window.MobileCardList = MobileCardList;

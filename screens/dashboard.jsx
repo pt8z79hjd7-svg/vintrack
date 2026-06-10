@@ -281,55 +281,8 @@ const Dashboard = ({ onNav, onOpen, activeBranch = 'both' }) => {
         </Card>
       </div>
 
-      {/* KPI cards (clickable) */}
-      <div className="kpi-grid kpi-5">
-        <button className={`kpi kpi-clickable ${revenueOK ? 'kpi-ok' : ''}`} onClick={() => onNav('monthly')}>
-          <div className="kpi-label">
-            <span className={`kpi-icon ${revenueOK ? 'ok' : ''}`}><ICoin size={16} /></span>
-            מחזור החודש <span className="muted" style={{fontSize:11}}>({VAT_LBL})</span>
-          </div>
-          <div className="kpi-value">{fmtCurrency(revenueInclVat)}</div>
-          {externalIncome > 0 && (
-            <div className="muted" style={{ fontSize: 10.5, marginTop: -4, marginBottom: 4 }}>
-              חנות: {fmtCurrency(revenueStoreOnlyInclVat)} + חוץ-קופה: {fmtCurrency(externalInclVat)}
-            </div>
-          )}
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <span className={`kpi-delta ${revDelta < 0 ? 'neg' : ''}`}>
-              {revDelta >= 0 ? <IArrowUp size={12} /> : <IArrowDown size={12} />}
-              {Math.abs(revDelta).toFixed(1)}%
-            </span>
-            <span className="kpi-foot">יעד {fmtCurrency(targetInclVat)}</span>
-          </div>
-          <div className="kpi-track">
-            <div className="kpi-track-fill" style={{
-              width: `${Math.min(100, (revenueInclVat / targetInclVat) * 100)}%`,
-              background: revenueOK ? 'var(--ok)' : 'var(--warn)'
-            }} />
-          </div>
-        </button>
-
-        <button className={`kpi kpi-clickable ${marginOK ? 'kpi-ok' : ''}`} onClick={() => onNav('monthly')}>
-          <div className="kpi-label">
-            <span className={`kpi-icon ${marginOK ? 'ok' : 'warn'}`}><IPercent size={16} /></span>
-            רווח גולמי
-          </div>
-          <div className="kpi-value">{current.margin.toFixed(1)}%</div>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <span className={`kpi-delta ${marginDelta < 0 ? 'neg' : ''}`}>
-              {marginDelta >= 0 ? <IArrowUp size={12} /> : <IArrowDown size={12} />}
-              {Math.abs(marginDelta).toFixed(1)}%
-            </span>
-            <span className="kpi-foot">יעד {TARGETS.margin}%</span>
-          </div>
-          <div className="kpi-track">
-            <div className="kpi-track-fill" style={{
-              width: `${Math.min(100, (current.margin / TARGETS.margin) * 100)}%`,
-              background: marginOK ? 'var(--ok)' : 'var(--warn)'
-            }} />
-          </div>
-        </button>
-
+      {/* KPI אופרטיביים — מחזור/רווח-גולמי כבר ב-TopStatsBar (בלי כפילות) */}
+      <div className="kpi-grid kpi-3">
         <button className="kpi kpi-clickable" onClick={() => onNav('orders')}>
           <div className="kpi-label">
             <span className="kpi-icon"><ITruck size={16} /></span>
