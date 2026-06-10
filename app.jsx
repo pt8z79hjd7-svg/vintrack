@@ -108,10 +108,11 @@ function TopStatsBar({ activeBranch, onNav }) {
           מרווח {Number(cur.margin || 0).toFixed(1)}% {marginOK ? '✓' : '· יעד ' + profitTarget + '%'} · ללא מע״מ
         </div>
       </button>
-      <button className="topstat topstat-accent" onClick={() => onNav('inventory')} title="ערך המלאי בחנות לפי עלות (ללא מע״מ) — לחץ לחלוקה לפי סניפים">
+      <button className="topstat topstat-accent" onClick={() => onNav('inventory')}
+        title={`ערך המלאי לפי עלות. ${window.vatLabelOpp ? window.vatLabelOpp() : 'ללא מע״מ'}: ${fmt(Math.round(invVal * (window.vatMultOpp ? window.vatMultOpp() : 1)))} — לחץ לחלוקה לפי סניפים`}>
         <div className="topstat-label">ערך מלאי</div>
-        <div className="topstat-value">{fmt(invVal)}</div>
-        <div className="topstat-sub">לפי עלות · ללא מע״מ</div>
+        <div className="topstat-value">{fmt(Math.round(invVal * (window.vatMult ? window.vatMult() : 1.18)))}</div>
+        <div className="topstat-sub">לפי עלות · {window.vatLabel ? window.vatLabel() : 'כולל מע״מ'}</div>
       </button>
     </div>
   );
