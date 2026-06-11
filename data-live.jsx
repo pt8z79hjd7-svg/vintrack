@@ -28,6 +28,17 @@ const detectPackSize = (name) => {
   return { units: 1, label: 'בודד' };
 };
 
+// גודל-ארגז להזמנות (port של guess_case_size בפייתון): בירה 500מ״ל=20, בירה=24, אחר=6.
+// fallback בלבד — כשאין case_size מהצינור (ORDER_RECS).
+window.guessCaseSize = (name) => {
+  const s = String(name || '');
+  const isBeer = /בירה|לאגר|אייל|סטאוט|פילזנר|פחית/.test(s) ||
+    /קרלסברג|הייניקן|גולדסטאר|מכבי|טובורג|אלכסנדר|פאולנר|נגב|מלכה|גינס|סטלה|ברוקלין|בודוויזר|קורונה|1664|ארדינגר|פרוני|ווייהנשטפן|אסאהי|בזלת|מיתוס/.test(s);
+  if (!isBeer) return 6;
+  if (/500|0\.5/.test(s)) return 20;
+  return 24;
+};
+
 // אתחול גלובלים ריקים — כדי שאף מסך לא יקרוס לפני שהנתונים נטענים
 Object.assign(window, {
   BRANCHES: [
@@ -38,7 +49,7 @@ Object.assign(window, {
   MONTHLY: [], DAILY_SAMPLE: {}, DAILY_BY_DATE: {}, DAILY_DETAILS: {},
   ORDERS: [], TRANSFERS: [], PROMOTIONS: [],
   ACTIVITY: [], INVENTORY_VALUE_BY_MONTH: [], INVENTORY_VALUE_TOTAL: { value: 0, mikado: 0, kohav: 0 },
-  PAST_ORDERS: {}, LAST_RECEIVED: {},
+  PAST_ORDERS: {}, LAST_RECEIVED: {}, SENT_ORDERS: [], ORDER_RECS: {},
   APPROVED_PRODUCTS: new Set(),
   PROMO_CATEGORIES: [], PROMO_BY_BARCODE: {},
   SETTINGS: { profitTarget: 25, defaultMin: 3, categoryMin: {}, showInclVat: true },
@@ -68,7 +79,7 @@ async function fetchAll(table, select = '*', opts = {}) {
 
 async function loadAllData() {
   const sb = window.sb;
-  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR, empR, empHoursR, genR, extR, spR, supR] = await Promise.all([
+  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR, empR, empHoursR, genR, extR, spR, supR, sentR] = await Promise.all([
     fetchAll('products'),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
@@ -88,6 +99,7 @@ async function loadAllData() {
     sb.from('external_clients').select('*').eq('is_active', true),   // לקוחות חיצוניים (וולט/תן ביס/פורטונה) — graceful אם הטבלה חסרה
     sb.from('supplier_purchases').select('*'),   // רכש לפי ספק×חודש (נכתב ע"י הצינור) — graceful אם הטבלה חסרה
     sb.from('suppliers').select('*'),            // תנאי תשלום לספקים (מנוהל-אפליקציה) — graceful אם הטבלה חסרה
+    sb.from('sent_orders').select('*').order('sent_at', { ascending: false }).limit(120),  // הזמנות שנשלחו — graceful אם הטבלה חסרה
   ]);
 
   // ─── אזהרה על טבלאות שנכשלו בטעינה (במקום silent || []) ───
@@ -250,10 +262,17 @@ async function loadAllData() {
     if (typeof terms === 'string') { try { terms = JSON.parse(terms); } catch { terms = []; } }
     if (!Array.isArray(terms)) terms = [];
     const _normTerms = terms.map((t) => _normGeneric(t)).filter(Boolean);
+    let odays = s.order_days || [];
+    if (typeof odays === 'string') { try { odays = JSON.parse(odays); } catch { odays = []; } }
+    if (!Array.isArray(odays)) odays = [];
     return {
       name: s.name, payment_terms_days: n(s.payment_terms_days) || 30,
       match_terms: terms, _normTerms,
       active: s.active !== false, notes: s.notes || '',
+      // לוח-זמנים (B1): ימי-הזמנה (Python weekday: שני=0..ראשון=6), טקסטים, סוכן
+      order_days: odays.map(Number), order_text: s.order_text || '',
+      delivery_text: s.delivery_text || '', order_via: s.order_via || '',
+      agent_name: s.agent_name || '', agent_phone: s.agent_phone || '',
     };
   });
   const SUPPLIER_PURCHASES = { byMonth: {}, all: [] };
@@ -330,6 +349,7 @@ async function loadAllData() {
     items: 0, barcode: d.barcode || '',
     deal_cost: d.deal_cost || 0, regular_cost: d.regular_cost || 0, sell_price: d.sell_price || 0,
     discount: (d.regular_cost && d.deal_cost) ? Math.round((1 - d.deal_cost / d.regular_cost) * 100) : 0,
+    min_quantity: n(d.min_quantity) || 0,
     notes: d.notes || '', is_active: d.is_active !== false,
   }));
 
@@ -349,6 +369,52 @@ async function loadAllData() {
     id: '#' + (5100 + i), supplier: sup, branch: 'both', date: '', eta: '',
     items: ordBySup[sup].length, sum: 0, status: 'pending', tone: 'warn',
   }));
+
+  // ─── ORDER_RECS (B1): המלצות הזמנה ממופתחות לפי ברקוד מנורמל ───
+  // מקור: order_recommendations מהצינור (velocity-based). שימוש: badge ימי-מלאי,
+  // עמודת "הצעה" חכמה, "מלא לפי המלצה", ועיגול-ארגז בבונה ההזמנות.
+  const _nbc = (b) => String(b || '').replace(/\D/g, '').replace(/^0+/, '');
+  const ORDER_RECS = {};
+  (ordRows || []).forEach((o) => {
+    const k = _nbc(o.barcode);
+    if (!k) return;
+    ORDER_RECS[k] = {
+      order_qty: n(o.recommended_qty) || n(o.order_qty), weekly: n(o.weekly),
+      case_size: n(o.case_size) || 6, urgency: o.urgency || 'בינוני', supplier: o.supplier || '',
+    };
+  });
+
+  // ─── PAST_ORDERS + LAST_RECEIVED אמיתיים מ-sent_orders (B1) ───
+  // PAST_ORDERS[supplier] = [{id, date, items:[{sku,qty,name,cost}], total, status, db_id}]
+  // sku = ברקוד (= product.id באפליקציה) → "שכפל אחרונה" עובד ישירות.
+  const PAST_ORDERS = {};
+  const SENT_ORDERS = [];
+  (((sentR && sentR.data) || [])).forEach((o) => {
+    let its = o.items || [];
+    if (typeof its === 'string') { try { its = JSON.parse(its); } catch { its = []; } }
+    if (!Array.isArray(its)) its = [];
+    const rec = {
+      id: 'SO-' + String(o.id || '').slice(0, 8), db_id: o.id,
+      supplier: o.supplier || '', branch: o.branch || 'both',
+      date: o.sent_at ? String(o.sent_at).slice(0, 10) : '',
+      sent_at: o.sent_at || null, received_at: o.received_at || null,
+      status: o.status || 'נשלחה', notes: o.notes || '',
+      items: its.map((x) => ({ sku: x.barcode || x.sku || '', qty: n(x.qty), name: x.name || '', cost: n(x.cost) })),
+      total: n(o.total_excl),
+    };
+    SENT_ORDERS.push(rec);
+    (PAST_ORDERS[rec.supplier] = PAST_ORDERS[rec.supplier] || []).push(rec);
+  });
+  const LAST_RECEIVED = {};
+  SENT_ORDERS.forEach((o) => {
+    if (o.status !== 'התקבלה') return;
+    if (!LAST_RECEIVED[o.supplier]) {
+      LAST_RECEIVED[o.supplier] = {
+        date: o.received_at ? String(o.received_at).slice(0, 10) : o.date,
+        total: Math.round(o.total), items: o.items.length,
+      };
+    }
+  });
 
   // פרטי יום מורחבים (מובילים, 05, הנחות, חריגות, חדשים) — לטאב Daily
   const DAILY_DETAILS = {};
@@ -533,7 +599,7 @@ async function loadAllData() {
     EMPLOYEES, EMPLOYEE_HOURS, GENERIC_PRODUCTS, EXTERNAL_CLIENTS,
     SUPPLIER_PURCHASES, SUPPLIER_TERMS,
     BARCODE_ALIAS: _barcodeAlias,
-    PAST_ORDERS: {}, LAST_RECEIVED: {},
+    PAST_ORDERS, LAST_RECEIVED, SENT_ORDERS, ORDER_RECS,
     LAST_REFRESH: Date.now(),
     LAST_DATA_SYNC: _lastSync || null,
   });

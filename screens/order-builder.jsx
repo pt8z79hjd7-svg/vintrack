@@ -5,7 +5,9 @@ const SupplierHub = ({ onSelectSupplier }) => {
   const [planOpen, setPlanOpen] = useState(false);
   const dmin = (window.SETTINGS && window.SETTINGS.defaultMin) || 3;
 
-  // Per-supplier aggregates
+  // Per-supplier aggregates + B2: דחיפות (מהמלצות הצינור) + לוח-זמני-ספק → "מה להזמין היום"
+  const _todayPy = (new Date().getDay() + 6) % 7;            // שני=0..ראשון=6 (כמו suppliers_schedule)
+  const _recsAll = Object.values(window.ORDER_RECS || {});
   const supplierData = SUPPLIERS.map(s => {
     const items = PRODUCTS.filter(p => p.supplier === s.id);
     const totalValue = items.reduce((acc, p) => acc + (p.stock.mikado + p.stock.kohav) * p.cost, 0);
@@ -15,7 +17,23 @@ const SupplierHub = ({ onSelectSupplier }) => {
     }).length;
     const last = LAST_RECEIVED[s.id];
     const past = PAST_ORDERS[s.id] || [];
-    return { ...s, items, totalValue, lowItems, last, past };
+    const recs = _recsAll.filter(r => r.supplier === s.id);
+    const red = recs.filter(r => r.urgency === 'דחוף').length;
+    const yellow = recs.filter(r => r.urgency === 'בינוני').length;
+    const term = window.matchSupplier ? window.matchSupplier(s.name) : null;
+    const orderDays = (term && term.order_days) || [];
+    const isOrderDay = orderDays.includes(_todayPy);
+    let nextIn = null;
+    if (orderDays.length) {
+      let best = 7;
+      orderDays.forEach(d => { const diff = (d - _todayPy + 7) % 7; if (diff < best) best = diff; });
+      nextIn = best;
+    }
+    return { ...s, items, totalValue, lowItems, last, past, red, yellow, term, isOrderDay, nextIn };
+  }).sort((a, b) => {
+    if (a.isOrderDay !== b.isOrderDay) return a.isOrderDay ? -1 : 1;   // יום-הזמנה היום — ראשון
+    if (a.red !== b.red) return b.red - a.red;                          // הכי הרבה דחופים
+    return b.totalValue - a.totalValue;
   });
 
   // תכנון הזמנות — כל המוצרים מתחת למינימום, מקובצים לפי ספק (בסיס למחזור הזמנות)
@@ -117,7 +135,8 @@ const SupplierHub = ({ onSelectSupplier }) => {
       {/* Supplier picker cards */}
       <div className="grid-3">
         {supplierData.map(s => (
-          <button key={s.id} className="supplier-pick" onClick={() => onSelectSupplier(s.id)}>
+          <button key={s.id} className="supplier-pick" onClick={() => onSelectSupplier(s.id)}
+                  style={s.isOrderDay ? { borderColor: 'var(--danger)' } : undefined}>
             <div className="supplier-pick-header">
               <div className="avatar" style={{
                 width: 40, height: 40, borderRadius: 10, fontSize: 14,
@@ -128,11 +147,30 @@ const SupplierHub = ({ onSelectSupplier }) => {
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, fontSize: 14.5 }}>{s.name}</div>
                 <div className="muted" style={{ fontSize: 11.5 }}>
-                  {s.items.length} פריטים · אספקה {s.lead}
+                  {s.items.length} פריטים
+                  {s.term && s.term.delivery_text ? ` · אספקה: ${s.term.delivery_text}` : ''}
                 </div>
               </div>
-              {s.lowItems > 0 && <Badge tone="warn">{s.lowItems} נמוך</Badge>}
+              <div className="col" style={{ gap: 4, alignItems: 'flex-end' }}>
+                {s.isOrderDay && <Badge tone="danger">📤 יום הזמנה היום</Badge>}
+                {s.red > 0 && <Badge tone="danger">{s.red} דחופים</Badge>}
+                {s.red === 0 && s.yellow > 0 && <Badge tone="warn">{s.yellow} בינוני</Badge>}
+                {s.red === 0 && s.yellow === 0 && s.lowItems > 0 && <Badge tone="warn">{s.lowItems} נמוך</Badge>}
+              </div>
             </div>
+
+            {(s.term && (s.term.order_text || s.term.agent_phone)) && (
+              <div className="muted" style={{ fontSize: 11, display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <span>🕐 {s.term.order_text || 'גמיש'}{s.nextIn != null && s.nextIn > 0 ? ` (בעוד ${s.nextIn} ימ׳)` : ''}</span>
+                {s.term.agent_phone && (
+                  <span role="link"
+                        onClick={(e) => { e.stopPropagation(); window.location.href = 'tel:' + s.term.agent_phone.replace(/[^\d+]/g, ''); }}
+                        style={{ color: 'var(--accent-strong)', fontWeight: 700 }}>
+                    📞 {s.term.agent_name && s.term.agent_name !== '—' ? s.term.agent_name + ' ' : ''}{s.term.agent_phone}
+                  </span>
+                )}
+              </div>
+            )}
 
             <div className="supplier-pick-stats">
               <div>
@@ -234,7 +272,7 @@ const OrderBuilder = ({ supplierId, onBack }) => {
   };
   const inc = (id) => updateQty(id, (qty[id] || 0) + 1);
   const dec = (id) => updateQty(id, Math.max(0, (qty[id] || 0) - 1));
-  const addPack = (id) => updateQty(id, (qty[id] || 0) + 6);
+  const addPack = (id, size) => updateQty(id, (qty[id] || 0) + (size || 6));
 
   const cartItems = Object.entries(qty)
     .filter(([, q]) => q > 0)
@@ -268,6 +306,54 @@ const OrderBuilder = ({ supplierId, onBack }) => {
     return Math.max(0, min - totalStock);
   };
 
+  // B2: המלצות הצינור (velocity-based) לפי ברקוד מנורמל + ימי-מלאי
+  const nbc = (b) => String(b || '').replace(/\D/g, '').replace(/^0+/, '');
+  const recOf = (p) => (window.ORDER_RECS || {})[nbc(p.sku)] || null;
+  const smartSuggest = (p) => {
+    const r = recOf(p);
+    if (r && r.order_qty > 0) return Math.round(r.order_qty);
+    return suggest(p);
+  };
+  const daysLeft = (p) => {
+    const r = recOf(p);
+    const wk = (r && r.weekly) || p.weekly || 0;
+    if (wk <= 0.1) return null;
+    return Math.round((p.stock.mikado + p.stock.kohav) * 7 / wk);
+  };
+  const recCount = products.reduce((a, p) => {
+    const r = recOf(p);
+    return a + ((r && r.order_qty > 0) ? 1 : 0);
+  }, 0);
+  const fillFromRecs = () => {
+    const next = { ...qty };
+    let added = 0;
+    products.forEach(p => {
+      const r = recOf(p);
+      if (r && r.order_qty > 0) { next[p.id] = Math.round(r.order_qty); added += 1; }
+    });
+    setQty(next);
+    if (window.toast) window.toast.success(`מולאו ${added} פריטים לפי המלצת המערכת`);
+  };
+
+  // B4: גודל-ארגז פר-מוצר (מהצינור, fallback לניחוש לפי שם)
+  const caseOf = (p) => {
+    const r = recOf(p);
+    return (r && r.case_size) || (window.guessCaseSize ? window.guessCaseSize(p.name) : 6);
+  };
+
+  // B3: מבצעי-ספק פעילים + מיפוי לפי ברקוד (🏷 על שורות + פס מבצעים)
+  const deals = (window.PROMOTIONS || []).filter(d =>
+    d.is_active && d.supplier && (d.supplier === supplierId || supplierId.includes(d.supplier) || d.supplier.includes(supplierId)));
+  const dealByNb = {};
+  deals.forEach(d => { const k = nbc(d.barcode); if (k) dealByNb[k] = d; });
+  const dealDaysLeft = (d) => {
+    if (!d.ends) return null;
+    const t = Date.parse(d.ends);
+    if (isNaN(t)) return null;
+    return Math.ceil((t - Date.now()) / 86400000);
+  };
+  const dealProduct = (d) => products.find(p => nbc(p.sku) === nbc(d.barcode)) || null;
+
   return (
     <div className="page order-builder">
       {/* Header */}
@@ -293,7 +379,13 @@ const OrderBuilder = ({ supplierId, onBack }) => {
             </div>
           </div>
         </div>
-        <div className="row">
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <button className="btn btn-primary"
+                  onClick={fillFromRecs}
+                  disabled={recCount === 0}
+                  title="ממלא את כל הכמויות לפי המלצת המערכת (קצב מכירה + מלאי)">
+            ⚡ מלא לפי המלצה{recCount > 0 ? ` (${recCount})` : ''}
+          </button>
           <button className="btn"
                   onClick={() => setQty({})}
                   disabled={cartUnits === 0}>
@@ -326,6 +418,48 @@ const OrderBuilder = ({ supplierId, onBack }) => {
         <div className="col" style={{ gap: 14, minWidth: 0 }}>
           {view === 'items' && (
             <>
+              {deals.length > 0 && (
+                <Card title={`🏷 מבצעים פעילים מ${supplier.name}`} sub="עלות מבצע מול רגיל · מינימום · תוקף">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '4px 2px' }}>
+                    {deals.map(d => {
+                      const dlft = dealDaysLeft(d);
+                      const prod = dealProduct(d);
+                      const curQ = prod ? (qty[prod.id] || 0) : 0;
+                      const needMore = d.min_quantity > 0 ? Math.max(0, d.min_quantity - curQ) : 0;
+                      return (
+                        <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                                                  padding: '10px 12px', background: 'var(--accent-soft)',
+                                                  border: '1px solid var(--line)', borderRadius: 10 }}>
+                          <div style={{ flex: 1, minWidth: 160 }}>
+                            <div style={{ fontWeight: 700, fontSize: 13 }}>{d.title}</div>
+                            <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+                              ₪{d.deal_cost} במקום ₪{d.regular_cost}
+                              {d.discount > 0 && <b style={{ color: 'var(--ok)' }}> (−{d.discount}%)</b>}
+                              {d.min_quantity > 0 && ` · מינ׳ ${d.min_quantity} יח׳`}
+                            </div>
+                          </div>
+                          {dlft != null && (
+                            <Badge tone={dlft <= 3 ? 'danger' : 'accent'}>
+                              {dlft <= 0 ? 'פג היום!' : `נותרו ${dlft} ימ׳`}
+                            </Badge>
+                          )}
+                          {prod && d.min_quantity > 0 && (
+                            needMore > 0 ? (
+                              <button className="btn btn-sm btn-primary"
+                                      onClick={() => updateQty(prod.id, d.min_quantity)}>
+                                הוסף {curQ > 0 ? `עוד ${needMore}` : d.min_quantity} למינימום
+                              </button>
+                            ) : (
+                              <Badge tone="ok">✓ במינימום ({curQ})</Badge>
+                            )
+                          )}
+                          {!prod && <span className="muted" style={{ fontSize: 11 }}>לא בקטלוג</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              )}
               <div className="search-bar" style={{ maxWidth: 'none', margin: 0 }}>
                 <ISearch size={15} />
                 <input value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
@@ -338,12 +472,21 @@ const OrderBuilder = ({ supplierId, onBack }) => {
                   empty="לא נמצאו מוצרים בקטלוג הספק"
                   renderCard={(p) => {
                     const cur = qty[p.id] || 0;
-                    const sg = suggest(p);
+                    const sg = smartSuggest(p);
+                    const dl = daysLeft(p);
+                    const cs = caseOf(p);
+                    const hasDeal = !!dealByNb[nbc(p.sku)];
                     return (
                       <React.Fragment>
                         <div className="mcard-head">
                           <div style={{ minWidth: 0 }}>
-                            <div className="mcard-title">{p.name}</div>
+                            <div className="mcard-title">
+                              {p.name}
+                              {hasDeal && <span title="יש מבצע פעיל">🏷</span>}
+                              {dl != null && (
+                                <Badge tone={dl < 7 ? 'danger' : dl < 14 ? 'warn' : 'ok'}>{dl} ימ׳</Badge>
+                              )}
+                            </div>
                             <div className="mcard-sub">{p.sku}</div>
                           </div>
                           <div style={{ textAlign: 'end', whiteSpace: 'nowrap' }}>
@@ -379,9 +522,15 @@ const OrderBuilder = ({ supplierId, onBack }) => {
                             <input type="number" value={cur} min="0"
                                    onChange={(e) => updateQty(p.id, Math.max(0, +e.target.value || 0))} />
                             <button onClick={() => inc(p.id)}>+</button>
-                            <button className="qty-pack" onClick={() => addPack(p.id)} title="הוסף ארגז (6)">+6</button>
+                            <button className="qty-pack" onClick={() => addPack(p.id, cs)} title={`הוסף ארגז (${cs})`}>+{cs}</button>
                           </div>
                         </div>
+                        {cur > 0 && cur % cs !== 0 && (
+                          <button className="btn btn-sm btn-ghost" style={{ fontSize: 11 }}
+                                  onClick={() => updateQty(p.id, Math.ceil(cur / cs) * cs)}>
+                            עגל לארגז: {Math.ceil(cur / cs) * cs}
+                          </button>
+                        )}
                       </React.Fragment>
                     );
                   }}
@@ -403,7 +552,10 @@ const OrderBuilder = ({ supplierId, onBack }) => {
                     {filledProducts.map(p => {
                       const cur = qty[p.id] || 0;
                       const totalStock = p.stock.mikado + p.stock.kohav;
-                      const sg = suggest(p);
+                      const sg = smartSuggest(p);
+                      const dl = daysLeft(p);
+                      const cs = caseOf(p);
+                      const hasDeal = !!dealByNb[nbc(p.sku)];
                       return (
                         <tr key={p.id} className={cur > 0 ? 'row-active' : ''}>
                           <td>
@@ -413,7 +565,13 @@ const OrderBuilder = ({ supplierId, onBack }) => {
                                 <div className="bottle-thumb-body" data-cat={p.cat} style={{ width: 18 }} />
                               </div>
                               <div>
-                                <div className="row-product-name" style={{ fontSize: 13 }}>{p.name}</div>
+                                <div className="row-product-name" style={{ fontSize: 13 }}>
+                                  {p.name}
+                                  {hasDeal && <span title="יש מבצע פעיל — ראה למעלה">🏷</span>}
+                                  {dl != null && (
+                                    <Badge tone={dl < 7 ? 'danger' : dl < 14 ? 'warn' : 'ok'}>{dl} ימ׳</Badge>
+                                  )}
+                                </div>
                                 <div className="mono-tiny">{p.sku}</div>
                               </div>
                             </div>
@@ -446,10 +604,16 @@ const OrderBuilder = ({ supplierId, onBack }) => {
                               <input type="number" value={cur} min="0"
                                      onChange={(e) => updateQty(p.id, Math.max(0, +e.target.value || 0))} />
                               <button onClick={() => inc(p.id)}>+</button>
-                              <button className="qty-pack" onClick={() => addPack(p.id)} title="הוסף ארגז (6)">
-                                +6
+                              <button className="qty-pack" onClick={() => addPack(p.id, cs)} title={`הוסף ארגז (${cs})`}>
+                                +{cs}
                               </button>
                             </div>
+                            {cur > 0 && cur % cs !== 0 && (
+                              <button className="btn btn-sm btn-ghost" style={{ fontSize: 10.5, marginTop: 3 }}
+                                      onClick={() => updateQty(p.id, Math.ceil(cur / cs) * cs)}>
+                                עגל לארגז: {Math.ceil(cur / cs) * cs}
+                              </button>
+                            )}
                           </td>
                           <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums',
                                        fontWeight: cur > 0 ? 700 : 400,
