@@ -660,6 +660,36 @@ window.vatMultOpp  = () => (window.vatOn() ? 1 : 1.18);             // מכפי�
 window.vatLabel    = () => (window.vatOn() ? 'כולל מע״מ' : 'ללא מע״מ');
 window.vatLabelOpp = () => (window.vatOn() ? 'ללא מע״מ' : 'כולל מע״מ');
 
+// ─── תשלומים קרובים לספקים (B6) — חבות חודש×ספק + תאריך-יעד (סוף-חודש + שוטף) ───
+// אותו חישוב כמו כרטיס "רכש וחבות לפי ספק" בסיכום החודשי, חתוך לתשלומים הבאים.
+window.upcomingPayments = function (maxItems) {
+  const byMonth = (window.SUPPLIER_PURCHASES || {}).byMonth || {};
+  const out = [];
+  Object.keys(byMonth).forEach((mk) => {
+    const parts = String(mk).split('-').map(Number);
+    const yy = parts[0], mm = parts[1];
+    if (!yy || !mm) return;
+    const monthEnd = new Date(yy, mm, 0);
+    const groups = {};
+    byMonth[mk].forEach((r) => {
+      const m = window.matchSupplier && window.matchSupplier(r.supplier);
+      const key = m ? m.name : r.supplier;
+      const g = groups[key] || (groups[key] = { name: key, days: m ? (m.payment_terms_days || 30) : 30, incl: 0 });
+      g.incl += r.amount_incl || 0;
+    });
+    Object.keys(groups).forEach((k) => {
+      const g = groups[k];
+      const due = new Date(monthEnd);
+      due.setDate(due.getDate() + g.days);
+      out.push({ supplier: g.name, month: mk, amount_incl: g.incl, due });
+    });
+  });
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return out.filter((x) => x.due >= today && x.amount_incl > 50)
+            .sort((a, b) => a.due - b.due)
+            .slice(0, maxItems || 3);
+};
+
 // ─── התאמת פריט כללי (05) לפי שם — זהה ל-match_generic ב-generic_match.py ───
 // מחזיר את רשומת ה-GENERIC_PRODUCTS עם ה-term הארוך ביותר שהוא substring בשם המנורמל,
 // או null. מילות קירור → תמיד null (נשמרות 100% רווח).

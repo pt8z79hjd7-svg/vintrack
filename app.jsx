@@ -124,6 +124,7 @@ function App() {
   const sub = subByHub[hub];
   const [modal, setModal] = useState(null);   // { kind, product }
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [fabOpen, setFabOpen] = useState(false);   // A5: כפתור פעולה צף (מובייל)
   const [activeBranch, setActiveBranch] = useState('both');
   const [activeSupplier, setActiveSupplier] = useState(null); // for order builder
   const [globalQ, setGlobalQ] = useState('');
@@ -405,6 +406,20 @@ function App() {
           );
         })}
       </nav>
+
+      {/* A5: כפתור פעולה צף — מובייל בלבד (CSS), 3 פעולות מהירות */}
+      <div className="fab-wrap">
+        {fabOpen && (
+          <div className="fab-menu">
+            <button onClick={() => { setFabOpen(false); setScannerOpen(true); }}>📷 סריקת ברקוד</button>
+            <button onClick={() => { setFabOpen(false); handleNav('orders'); }}>🛒 הזמנה חדשה</button>
+            <button onClick={() => { setFabOpen(false); handleNav('transfers'); }}>🔄 העברה</button>
+          </div>
+        )}
+        <button className="fab" onClick={() => setFabOpen(o => !o)} title="פעולות מהירות">
+          {fabOpen ? '✕' : '+'}
+        </button>
+      </div>
 
       {/* Modals */}
       {modal?.kind === 'add'    && <AddProductModal onClose={closeModal} initialBarcode={modal.barcode || ''} />}

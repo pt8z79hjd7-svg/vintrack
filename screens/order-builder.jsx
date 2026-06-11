@@ -132,6 +132,36 @@ const SupplierHub = ({ onSelectSupplier }) => {
         )}
       </Card>
 
+      {/* B6: תשלומים קרובים לספקים — סוף-חודש-חשבונית + שוטף */}
+      {(() => {
+        const pays = window.upcomingPayments ? window.upcomingPayments(3) : [];
+        if (!pays.length) return null;
+        return (
+          <Card title="💸 תשלומים קרובים" sub="חבות לפי חודש-רכש + תנאי שוטף · כולל מע״מ">
+            <div style={{ padding: '8px 14px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {pays.map((p, i) => {
+                const daysTo = Math.ceil((p.due - Date.now()) / 86400000);
+                return (
+                  <div key={i} className="between" style={{ fontSize: 13, gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700 }}>
+                      {p.supplier} <span className="muted" style={{ fontSize: 11, fontWeight: 400 }}>(רכש {p.month})</span>
+                    </span>
+                    <span className="row" style={{ gap: 8 }}>
+                      <Badge tone={daysTo <= 7 ? 'danger' : daysTo <= 14 ? 'warn' : 'accent'}>
+                        {p.due.toLocaleDateString('he-IL')} · בעוד {daysTo} ימ׳
+                      </Badge>
+                      <b style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--danger)' }}>
+                        ₪{Math.round(p.amount_incl).toLocaleString('he-IL')}
+                      </b>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        );
+      })()}
+
       {/* Supplier picker cards */}
       <div className="grid-3">
         {supplierData.map(s => (
@@ -339,6 +369,64 @@ const OrderBuilder = ({ supplierId, onBack }) => {
   const caseOf = (p) => {
     const r = recOf(p);
     return (r && r.case_size) || (window.guessCaseSize ? window.guessCaseSize(p.name) : 6);
+  };
+
+  // B5: שמירת הזמנה אמיתית ל-sent_orders + התאמת-קליטה + בדיקת-מחיר
+  const [savingOrder, setSavingOrder] = useState(false);
+  const saveOrder = async () => {
+    if (!cartItems.length || savingOrder) return;
+    setSavingOrder(true);
+    const items = cartItems.map(({ product, qty: q }) => ({
+      barcode: product.sku || product.id, name: product.name, qty: q, cost: product.cost,
+    }));
+    const { error } = await window.sb.from('sent_orders').insert({
+      supplier: supplierId, branch, items,
+      total_excl: Math.round(cartTotal * 100) / 100, status: 'נשלחה',
+    });
+    setSavingOrder(false);
+    if (error) { (window.toast?.error || alert)('שגיאה בשמירת ההזמנה: ' + error.message); return; }
+    (window.toast?.success || alert)('✓ ההזמנה נשמרה — תעקוב בטאב "הזמנות אחרונות"');
+    setQty({});
+    setView('past');
+    setTimeout(() => window.refreshData && window.refreshData('order-saved'), 400);
+  };
+
+  // התאמת-קליטה: מה מההזמנה כבר הגיע (ת.מ. רכש ב-daily_details.incoming_purchases מאז השליחה)
+  const receivedFor = (order) => {
+    const since = order.sent_at ? String(order.sent_at).slice(0, 10) : (order.date || '');
+    const got = {};
+    Object.keys(window.DAILY_DETAILS || {}).forEach(day => {
+      if (since && day < since) return;
+      (((window.DAILY_DETAILS || {})[day] || {}).incoming_purchases || []).forEach(r => {
+        const k = nbc(r.barcode);
+        if (!k) return;
+        if (!got[k]) got[k] = { qty: 0, cost_doc: null };
+        got[k].qty += Number(r.qty) || 0;
+        if (r.cost_doc != null && r.cost_doc !== '') got[k].cost_doc = Number(r.cost_doc);
+      });
+    });
+    let full = order.items.length > 0;
+    const lines = order.items.map(it => {
+      const k = nbc(it.sku);
+      const rec = got[k];
+      const gotQty = rec ? rec.qty : 0;
+      if (gotQty < it.qty) full = false;
+      // בדיקת-מחיר: מה שנרשם בקליטה מול מחיר מבצע (אם יש) או עלות ההזמנה
+      const deal = dealByNb[k];
+      const refCost = deal ? deal.deal_cost : (it.cost || 0);
+      const overpay = (rec && rec.cost_doc != null && refCost > 0 && rec.cost_doc > refCost * 1.02)
+        ? Math.round((rec.cost_doc - refCost) * 100) / 100 : null;
+      return { ...it, gotQty, overpay, refCost, cost_doc: rec ? rec.cost_doc : null };
+    });
+    return { lines, full };
+  };
+  const markReceived = async (order) => {
+    if (!order.db_id) return;
+    const { error } = await window.sb.from('sent_orders')
+      .update({ status: 'התקבלה', received_at: new Date().toISOString() }).eq('id', order.db_id);
+    if (error) { (window.toast?.error || alert)('שגיאה: ' + error.message); return; }
+    (window.toast?.success || alert)('✓ סומנה כהתקבלה');
+    setTimeout(() => window.refreshData && window.refreshData('order-received'), 400);
   };
 
   // B3: מבצעי-ספק פעילים + מיפוי לפי ברקוד (🏷 על שורות + פס מבצעים)
@@ -631,30 +719,41 @@ const OrderBuilder = ({ supplierId, onBack }) => {
           )}
 
           {view === 'past' && (
-            <Card title="הזמנות אחרונות" sub="לחץ על הזמנה כדי לטעון אותה לעגלה">
+            <Card title="הזמנות אחרונות" sub="מעקב קליטה מול ת.מ. רכש · שכפול בלחיצה">
               {past.length === 0 ? (
-                <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-3)' }}>
-                  אין עדיין הזמנות מספק זה
-                </div>
-              ) : past.map(o => (
-                <div key={o.id} className="past-order-row">
-                  <div>
-                    <div className="row" style={{ gap: 8 }}>
+                <EmptyState icon="📋" text='אין עדיין הזמנות שמורות מספק זה. בנה הזמנה ולחץ "שמור ושלח".' />
+              ) : past.map(o => {
+                const isOpen = o.status === 'נשלחה';
+                const recon = isOpen ? receivedFor(o) : null;
+                const gotLines = recon ? recon.lines.filter(l => l.gotQty > 0).length : 0;
+                const shortLines = recon ? recon.lines.filter(l => l.gotQty < l.qty) : [];
+                const overpays = recon ? recon.lines.filter(l => l.overpay != null) : [];
+                return (
+                <div key={o.id} className="past-order-row" style={{ flexWrap: 'wrap' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
                       <span className="mono-tiny" style={{ fontWeight: 700, color: 'var(--ink)' }}>{o.id}</span>
                       <span className="muted">·</span>
                       <span style={{ fontSize: 13 }}>{o.date}</span>
+                      <Badge tone={o.status === 'התקבלה' ? 'ok' : o.status === 'בוטלה' ? 'danger' : 'warn'}>{o.status}</Badge>
+                      {isOpen && recon && (
+                        recon.full
+                          ? <Badge tone="ok">✓ הכל נקלט — אפשר לסמן כהתקבלה</Badge>
+                          : <Badge tone={gotLines > 0 ? 'accent' : 'warn'}>{gotLines}/{o.items.length} שורות נקלטו</Badge>
+                      )}
                     </div>
                     <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                       {o.items.length} פריטים · {o.items.reduce((a, x) => a + x.qty, 0)} יחידות
                     </div>
                     <div style={{ marginTop: 8, fontSize: 12 }}>
-                      {o.items.slice(0, 3).map(({ sku, qty: q }) => {
+                      {o.items.slice(0, 3).map(({ sku, qty: q, name }) => {
                         const p = PRODUCTS.find(x => x.id === sku);
-                        return p ? (
+                        const nm = (p && p.name) || name || sku;
+                        return (
                           <span key={sku} className="past-item-chip">
-                            {p.name.split(' ').slice(0, 3).join(' ')} ×{q}
+                            {String(nm).split(' ').slice(0, 3).join(' ')} ×{q}
                           </span>
-                        ) : null;
+                        );
                       })}
                       {o.items.length > 3 && (
                         <span className="muted" style={{ fontSize: 11.5 }}>
@@ -662,20 +761,38 @@ const OrderBuilder = ({ supplierId, onBack }) => {
                         </span>
                       )}
                     </div>
+                    {isOpen && shortLines.length > 0 && shortLines.length < o.items.length && (
+                      <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--warn)' }}>
+                        ⏳ חסר: {shortLines.slice(0, 4).map(l => `${String(l.name || l.sku).split(' ').slice(0, 2).join(' ')} (${l.gotQty}/${l.qty})`).join(' · ')}
+                        {shortLines.length > 4 ? ` · +${shortLines.length - 4}` : ''}
+                      </div>
+                    )}
+                    {isOpen && overpays.length > 0 && (
+                      <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--danger)', fontWeight: 600 }}>
+                        ⚠ מחיר בקליטה גבוה מהמצופה: {overpays.slice(0, 3).map(l =>
+                          `${String(l.name || l.sku).split(' ').slice(0, 2).join(' ')} (₪${l.cost_doc} במקום ₪${l.refCost})`).join(' · ')}
+                        {overpays.length > 3 ? ` · +${overpays.length - 3}` : ''} — בסיס לזיכוי מהספק
+                      </div>
+                    )}
                   </div>
                   <div style={{ textAlign: 'end' }}>
                     <div style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                      ₪{o.total.toLocaleString('he-IL')}
+                      ₪{Math.round(o.total).toLocaleString('he-IL')}
                     </div>
-                    <div className="row" style={{ gap: 6, marginTop: 8 }}>
+                    <div className="row" style={{ gap: 6, marginTop: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                       <button className="btn btn-sm" onClick={() => loadFromPast(o)}>
                         <IUpload size={12} /> שכפל
                       </button>
-                      <button className="btn btn-sm btn-ghost">פרטים</button>
+                      {isOpen && (
+                        <button className="btn btn-sm btn-primary" onClick={() => markReceived(o)}>
+                          ✓ סמן כהתקבלה
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </Card>
           )}
 
@@ -809,9 +926,9 @@ const OrderBuilder = ({ supplierId, onBack }) => {
               <IFile size={14} /> PDF
             </button>
             <button className="btn btn-primary"
-                    disabled={cartUnits === 0}
-                    onClick={() => alert('הזמנה נשמרה במערכת')}>
-              <ICheck size={14} /> שמור ושלח
+                    disabled={cartUnits === 0 || savingOrder}
+                    onClick={saveOrder}>
+              <ICheck size={14} /> {savingOrder ? 'שומר…' : 'שמור ושלח'}
             </button>
           </div>
         </div>
