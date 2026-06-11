@@ -19,6 +19,8 @@ const canonName = (n) => NAME_ALIAS[n] || n;
 const EmployeeSales = ({ activeBranch = 'both' }) => {
   useLiveData();
   const [subTab, setSubTab] = useState('sales');   // 'sales' | 'payroll'
+  const isMobileP = useIsMobile();                  // A4: שכר במובייל — כרטיסים עם עורך נפתח
+  const [editEmp, setEditEmp] = useState(null);
   const [period, setPeriod] = useState('30');
   const [selectedEmp, setSelectedEmp] = useState(null);
   const _curMonthKey = new Date().toISOString().slice(0, 7);
@@ -294,6 +296,74 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
         const sumGross = rows.reduce((a, r) => a + r.p.gross, 0);
         const sumAdd   = rows.reduce((a, r) => a + r.p.additions, 0);
         const sumTotal = rows.reduce((a, r) => a + r.p.total, 0);
+
+        // A4: מובייל — כרטיס לעובד, הקשה פותחת עורך ממוקד (4 שדות + תצוגה חיה)
+        if (isMobileP) {
+          return (
+            <Card title={`חישוב שכר — ${monthLabel(payrollMonth)}`} sub="הקש על עובד להזנת שעות">
+              <div style={{ padding: '10px 12px' }}>
+                <div className="mcard-list">
+                  {rows.map(({ emp, p, hasInput }) => {
+                    const local = hoursLocal[emp.id] || {};
+                    const open = editEmp === emp.id;
+                    const fld = (label, val, onCh, step) => (
+                      <label className="between" style={{ gap: 10, alignItems: 'center' }}>
+                        <span className="muted" style={{ fontSize: 12.5 }}>{label}</span>
+                        <input className="input" type="number" min="0" step={step || 0.5} value={val ?? ''}
+                               onChange={onCh}
+                               style={{ width: 110, padding: '8px 10px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }} />
+                      </label>
+                    );
+                    return (
+                      <div key={emp.id} className="mcard">
+                        <div className="mcard-head" onClick={() => setEditEmp(open ? null : emp.id)} style={{ cursor: 'pointer' }}>
+                          <div>
+                            <div className="mcard-title">{emp.name}{emp.last_name ? ` ${emp.last_name}` : ''} {open ? '▲' : '▼'}</div>
+                            <div className="mcard-sub">
+                              {hasInput ? `שעות: ${local.reg || 0} רגילות · ברוטו ${fmt(p.gross)}` : 'לא הוזנו שעות לחודש זה'}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'end', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontWeight: 800, color: 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>{fmt(p.total)}</div>
+                            <div className="muted" style={{ fontSize: 10.5 }}>עלות מעסיק</div>
+                          </div>
+                        </div>
+                        {open && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8, borderTop: '1px solid var(--line)' }}>
+                            {fld('שכר לשעה (₪)', rateLocal[emp.id],
+                                 (e) => setRateLocal(s => ({ ...s, [emp.id]: e.target.value })), 1)}
+                            {fld('שעות רגילות', local.reg,
+                                 (e) => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], reg: e.target.value } })))}
+                            {fld('שעות ×1.25', local.e125,
+                                 (e) => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], e125: e.target.value } })))}
+                            {fld('שעות ×1.5', local.e150,
+                                 (e) => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], e150: e.target.value } })))}
+                            <div className="between" style={{ fontSize: 12.5 }}>
+                              <span>ברוטו: <b>{fmt(p.gross)}</b></span>
+                              <span>הפרשות: <b>{fmt(p.additions)}</b></span>
+                            </div>
+                            <button className="btn btn-primary" style={{ minHeight: 44 }}
+                                    onClick={() => savePayrollRow(emp)}
+                                    disabled={savingEmp === emp.id || !(Number(rateLocal[emp.id]) > 0)}>
+                              {savingEmp === emp.id ? 'שומר…' : '💾 שמור שעות'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="between" style={{ marginTop: 12, padding: '10px 4px', borderTop: '2px solid var(--line)', fontWeight: 700, fontSize: 13.5 }}>
+                  <span>סה״כ עלות מעסיק</span>
+                  <span style={{ color: 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>{fmt(sumTotal)}</span>
+                </div>
+                <div className="muted between" style={{ fontSize: 11.5, padding: '0 4px' }}>
+                  <span>ברוטו {fmt(sumGross)}</span><span>הפרשות {fmt(sumAdd)}</span>
+                </div>
+              </div>
+            </Card>
+          );
+        }
 
         return (
           <Card title={`חישוב שכר — ${monthLabel(payrollMonth)}`}

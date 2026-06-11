@@ -664,6 +664,7 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
 // === Monthly — בחירת טווח חודשים ===
 const Monthly = ({ activeBranch = 'both' }) => {
   useLiveData();   // re-render אחרי refreshData
+  const isMobileM = useIsMobile();   // A4: P&L+תזרים ככרטיסי-חודש במובייל
   const all = window.MONTHLY || [];
   const [from, setFrom] = useState(0);
   const [to, setTo] = useState(Math.max(0, all.length - 1));
@@ -820,6 +821,44 @@ const Monthly = ({ activeBranch = 'both' }) => {
 
       {/* ─── טבלה 1: רווח והפסד (P&L) — גישת רווחיות: מחזור − עלות הסחורה שנמכרה (COGS) − הוצאות ─── */}
       <Card title="📊 רווח והפסד (P&L)" sub="גישת רווחיות · מחזור − עלות הסחורה שנמכרה (COGS) − הוצאות · כל הסכומים ללא מע״מ">
+        {isMobileM ? (
+          <div className="mcard-list" style={{ padding: '10px 12px' }}>
+            {[...sel].reverse().map((m) => {
+              const finRow = (window.FINANCE?.byMonth || {})[m.month] || {};
+              const ext = (Number(finRow.wolt) || 0) + (Number(finRow.tenbis) || 0) + (Number(finRow.external_sales) || 0);
+              const exp = (finRow.totalExpense || 0);
+              const rev = Math.round(m.total);
+              const gross = Math.round(m.profit);
+              const cogs = rev - gross;
+              const net = gross + ext - exp;
+              const pct = rev > 0 ? (net / rev) * 100 : 0;
+              const cell = (label, val, color) => (
+                <div className="mcard-meta-item">
+                  <div className="mcard-meta-label">{label}</div>
+                  <div className="mcard-meta-value" style={color ? { color } : undefined}>{val}</div>
+                </div>
+              );
+              return (
+                <div key={`plm-${m.m}`} className="mcard" style={m.current ? { borderColor: 'var(--accent)' } : undefined}>
+                  <div className="mcard-head">
+                    <div className="mcard-title">{m.m} {m.current && <Badge tone="accent">נוכחי</Badge>}</div>
+                    <div style={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: net >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
+                      ₪{Math.round(net).toLocaleString('he-IL')}
+                    </div>
+                  </div>
+                  <div className="mcard-meta">
+                    {cell('מחזור', `₪${rev.toLocaleString('he-IL')}`)}
+                    {cell('עלות סחורה', cogs > 0 ? `₪${cogs.toLocaleString('he-IL')}` : '—', 'var(--danger)')}
+                    {cell('רווח גולמי', `₪${gross.toLocaleString('he-IL')}`, 'var(--ok)')}
+                    {cell('חוץ-קופה', ext > 0 ? `₪${Math.round(ext).toLocaleString('he-IL')}` : '—')}
+                    {cell('הוצאות', exp > 0 ? `₪${Math.round(exp).toLocaleString('he-IL')}` : '—', 'var(--danger)')}
+                    {cell('מרווח', `${pct.toFixed(1)}%`, pct >= 0 ? 'var(--ok)' : 'var(--danger)')}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
         <div className="table-wrap">
           <table className="tbl">
             <thead>
@@ -872,6 +911,7 @@ const Monthly = ({ activeBranch = 'both' }) => {
             </tbody>
           </table>
         </div>
+        )}
         <div className="muted" style={{ fontSize: 11, padding: 14, lineHeight: 1.5 }}>
           💡 <b>גישת רווחיות (P&L):</b> נמדדת רק <b>עלות הסחורה שנמכרה</b> בפועל (COGS) מול המכירות — לא כל הרכש.
           רווח נטו = רווח גולמי + חוץ-קופה − הוצאות (שכר/שכ״ד/חשמל…). כל הסכומים ללא מע״מ.
@@ -880,6 +920,40 @@ const Monthly = ({ activeBranch = 'both' }) => {
 
       {/* ─── טבלה 2: תזרים מזומנים (Cash Flow) — גישת מזומן: כסף שנכנס − כל הרכש ששולם − הוצאות ─── */}
       <Card title="💵 תזרים מזומנים (Cash Flow)" sub="גישת מזומן · מכירות + חוץ-קופה − רכש ששולם לספקים − הוצאות · כל הסכומים כולל מע״מ">
+        {isMobileM ? (
+          <div className="mcard-list" style={{ padding: '10px 12px' }}>
+            {[...sel].reverse().map((m) => {
+              const finRow = (window.FINANCE?.byMonth || {})[m.month] || {};
+              const ext = (Number(finRow.wolt) || 0) + (Number(finRow.tenbis) || 0) + (Number(finRow.external_sales) || 0);
+              const exp = (finRow.totalExpense || 0);
+              const salesIncl = Math.round(m.total * 1.18);
+              const purchIncl = Math.round((m.purchases || 0) * 1.18);
+              const cashNet = salesIncl + ext - purchIncl - exp;
+              const cell = (label, val, color) => (
+                <div className="mcard-meta-item">
+                  <div className="mcard-meta-label">{label}</div>
+                  <div className="mcard-meta-value" style={color ? { color } : undefined}>{val}</div>
+                </div>
+              );
+              return (
+                <div key={`cfm-${m.m}`} className="mcard" style={m.current ? { borderColor: 'var(--accent)' } : undefined}>
+                  <div className="mcard-head">
+                    <div className="mcard-title">{m.m} {m.current && <Badge tone="accent">נוכחי</Badge>}</div>
+                    <div style={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: cashNet >= 0 ? 'var(--ok)' : 'var(--danger)' }}>
+                      ₪{Math.round(cashNet).toLocaleString('he-IL')}
+                    </div>
+                  </div>
+                  <div className="mcard-meta">
+                    {cell('מכירות', `₪${salesIncl.toLocaleString('he-IL')}`)}
+                    {cell('חוץ-קופה', ext > 0 ? `₪${Math.round(ext).toLocaleString('he-IL')}` : '—')}
+                    {cell('רכש סחורה', purchIncl > 0 ? `₪${purchIncl.toLocaleString('he-IL')}` : '—', 'var(--danger)')}
+                    {cell('הוצאות', exp > 0 ? `₪${Math.round(exp).toLocaleString('he-IL')}` : '—', 'var(--danger)')}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
         <div className="table-wrap">
           <table className="tbl">
             <thead>
@@ -929,6 +1003,7 @@ const Monthly = ({ activeBranch = 'both' }) => {
             </tbody>
           </table>
         </div>
+        )}
         <div className="muted" style={{ fontSize: 11, padding: 14, lineHeight: 1.5 }}>
           💡 <b>גישת מזומן (Cash Flow):</b> כסף שנכנס פחות כסף שיצא — כולל <b>כל הרכש</b> שבוצע החודש (גם מה שעדיין לא נמכר), כולל מע״מ.
           <br />שים לב: רכש כבד בחודש אחד נמכר לאורך כמה חודשים — תזרים שלילי בחודש רכש גדול הוא תקין. תאריך תשלום בפועל לפי תנאי הספק (ראה כרטיס "רכש וחבות לפי ספק").
