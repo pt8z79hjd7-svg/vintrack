@@ -1,5 +1,6 @@
 // === Settings — הגדרות גלובליות + min_stock להמלצות הזמנה ===
 const Settings = ({ activeBranch = 'both' }) => {
+  const [sec, setSec] = useState('general');   // A2: טאב הגדרות פעיל
   useLiveData();
   const [defaultMin, setDefaultMin] = useState(3);
   const [busy, setBusy] = useState(false);
@@ -536,6 +537,18 @@ const Settings = ({ activeBranch = 'both' }) => {
         </div>
       </div>
 
+      {/* A2: טאבי הגדרות — 10 כרטיסים מחולקים ל-7 קבוצות */}
+      <div className="chips" style={{ flexWrap: 'wrap' }}>
+        {[['general', '⚙️ כללי'], ['promos', '🏷️ מבצעים'], ['finance', '💰 כספים'],
+          ['employees', '👥 עובדים'], ['generic', '🧩 פריטים כלליים'],
+          ['external', '📦 לקוחות חיצוניים'], ['suppliers', '🏢 ספקים']].map(([id, label]) => (
+          <button key={id} className={`chip ${sec === id ? 'active' : ''}`} onClick={() => setSec(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {sec === 'general' && (<React.Fragment>
       {/* מינימום מלאי גלובלי */}
       <Card
         title="מינימום מלאי גלובלי"
@@ -631,6 +644,9 @@ const Settings = ({ activeBranch = 'both' }) => {
         </div>
       </Card>
 
+      </React.Fragment>)}
+
+      {sec === 'promos' && (<React.Fragment>
       {/* ניהול מבצעי לקוחות */}
       <Card title="🏷️ מבצעי לקוחות" sub="סוגי מבצעי מכירה (3 ב-100, 3 ב-120…) — לשיוך למוצרים בכרטיס המוצר">
         <div style={{ padding: 18 }}>
@@ -690,6 +706,9 @@ const Settings = ({ activeBranch = 'both' }) => {
         </div>
       </Card>
 
+      </React.Fragment>)}
+
+      {sec === 'finance' && (<React.Fragment>
       {/* הוצאות + הכנסות חוץ-קופה → רווח נטו */}
       <Card title="💰 הוצאות חודשיות + הכנסות חוץ-קופה" sub="הזנה ידנית — מחושב רווח נטו (רווח גולמי + הכנסות חוץ-קופה − הוצאות)">
         <div style={{ padding: 18 }}>
@@ -757,6 +776,9 @@ const Settings = ({ activeBranch = 'both' }) => {
         </div>
       </Card>
 
+      </React.Fragment>)}
+
+      {sec === 'employees' && (<React.Fragment>
       {/* ניהול עובדים */}
       <Card title="👥 ניהול עובדים" sub="שכר שעתי + הפרשות מעסיק ברירת מחדל לכל עובד">
         <div style={{ padding: 18 }}>
@@ -866,6 +888,9 @@ const Settings = ({ activeBranch = 'both' }) => {
         </div>
       </Card>
 
+      </React.Fragment>)}
+
+      {sec === 'generic' && (<React.Fragment>
       {/* ניהול פריטים כלליים (ברקוד 05) */}
       <Card title="🧩 פריטים כלליים (ללא ברקוד)" sub="פריטי 05 — התאמת עלות לפי שם → רווח אמיתי בדוחות + הופעה כמוצרים">
         <div style={{ padding: 18 }}>
@@ -1041,6 +1066,9 @@ const Settings = ({ activeBranch = 'both' }) => {
         </div>
       </Card>
 
+      </React.Fragment>)}
+
+      {sec === 'external' && (<React.Fragment>
       {/* ניהול לקוחות חיצוניים (וולט / תן ביס / פורטונה) */}
       <Card title="📦 לקוחות חיצוניים" sub="וולט / תן ביס / פורטונה — זיהוי לפי שם הלקוח בקופה → הפרדה ממחזור החנות + מעקב צפי כניסה">
         <div style={{ padding: 18 }}>
@@ -1174,6 +1202,9 @@ const Settings = ({ activeBranch = 'both' }) => {
         </div>
       </Card>
 
+      </React.Fragment>)}
+
+      {sec === 'suppliers' && (<React.Fragment>
       {/* ניהול תנאי תשלום לספקים — מזין את תאריך התשלום הצפוי בכרטיס "רכש וחבות לפי ספק" בסיכום החודשי */}
       <Card title="🏢 תנאי תשלום לספקים" sub="ימי שוטף לכל ספק → תאריך תשלום צפוי בתזרים. מילות-זיהוי מאחדות שמות מלאים/וריאנטים. ספק ברכש שלא זוהה מסומן ❓">
         <div style={{ padding: 18 }}>
@@ -1311,6 +1342,9 @@ const Settings = ({ activeBranch = 'both' }) => {
         </div>
       </Card>
 
+      </React.Fragment>)}
+
+      {sec === 'general' && (<React.Fragment>
       {/* פעולות תחזוקה */}
       <Card title="פעולות תחזוקה" sub="הורדה / רענון מיידיים">
         <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1347,6 +1381,7 @@ const Settings = ({ activeBranch = 'both' }) => {
           </table>
         </div>
       </Card>
+      </React.Fragment>)}
     </div>
   );
 };
