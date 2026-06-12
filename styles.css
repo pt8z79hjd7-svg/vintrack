@@ -2023,3 +2023,23 @@ button:focus-visible, .input:focus-visible, .select:focus-visible {
     text-align: start;
   }
 }
+
+/* ─── טאב כספים: שורת-פיצול פר-סניף (מיקדו/כוכב/משותף) ─── */
+.fin-split-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) 86px 86px 86px 28px;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 0;
+}
+.fin-split-head { border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.fin-split-extra { display: flex; justify-content: center; }
+@media (max-width: 480px) {
+  .fin-split-row {
+    grid-template-columns: repeat(3, 1fr) 28px;
+    row-gap: 2px;
+  }
+  .fin-split-label { grid-column: 1 / -1; padding-top: 6px; }
+  .fin-split-head .fin-split-label { display: none; }
+  .fin-split-row .input { padding: 8px 2px; font-size: 14px; min-height: 40px; }
+}

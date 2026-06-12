@@ -862,6 +862,51 @@ const Monthly = ({ activeBranch = 'both' }) => {
         );
       })()}
 
+      {/* 🎟️ שוברים — סיכום חודשי (זיכוי-עתיד מאספיריט, מ-daily_details של החודש) */}
+      {(() => {
+        if (!curM) return null;
+        const dd = window.DAILY_DETAILS || {};
+        let cnt = 0, cost = 0, val = 0;
+        const byProd = {};
+        Object.keys(dd).forEach((dt) => {
+          if (dt.slice(0, 7) !== curM.month) return;
+          const d = dd[dt];
+          cnt += d.coupons_count || 0;
+          cost += d.coupons_cost_excl || 0;
+          val += d.coupons_value_incl || 0;
+          (d.coupons || []).forEach((c) => {
+            const k = c.barcode || c.name;
+            if (!byProd[k]) byProd[k] = { name: c.name, qty: 0, cost: 0 };
+            byProd[k].qty += c.qty || 0;
+            byProd[k].cost += (c.cost_excl_per_unit || 0) * (c.qty || 0);
+          });
+        });
+        if (cnt <= 0) return null;
+        const rows = Object.keys(byProd).map(k => byProd[k]).sort((a, b) => b.qty - a.qty);
+        return (
+          <Card title="🎟️ שוברים — חודשי"
+                sub={`${curM.m} · ${cnt} בקבוקים · שווי-מכירה ₪${Math.round(val).toLocaleString('he-IL')} · זיכוי-צפוי מאספיריט ₪${Math.round(cost).toLocaleString('he-IL')} (עלות)`}>
+            <div className="table-wrap">
+              <table className="tbl">
+                <thead><tr><th>מוצר</th><th style={{ textAlign: 'end' }}>כמות</th><th style={{ textAlign: 'end' }}>זיכוי-צפוי (עלות)</th></tr></thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i}>
+                      <td style={{ fontWeight: 500 }}>{r.name}</td>
+                      <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>{r.qty}</td>
+                      <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--ok)' }}>₪{Math.round(r.cost).toLocaleString('he-IL')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="muted" style={{ fontSize: 12, padding: 8 }}>
+              ℹ️ הזיכוי מאספיריט מגיע באמצע/סוף חודש לפי מחיר-עלות. השווה מול הזיכוי בחשבונית הספק.
+            </div>
+          </Card>
+        );
+      })()}
+
       {/* ─── טבלה 1: רווח והפסד (P&L) — גישת רווחיות: מחזור − עלות הסחורה שנמכרה (COGS) − הוצאות ─── */}
       <Card title="📊 רווח והפסד (P&L)" sub="גישת רווחיות · מחזור − עלות הסחורה שנמכרה (COGS) − הוצאות · כל הסכומים ללא מע״מ">
         {isMobileM ? (

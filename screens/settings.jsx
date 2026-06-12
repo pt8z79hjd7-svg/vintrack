@@ -773,26 +773,26 @@ const Settings = ({ activeBranch = 'both' }) => {
 
           {/* כותרת עמודות פר-סניף */}
           {(() => {
-            const inSt = { width: 86, textAlign: 'center', fontWeight: 700, padding: '6px 6px', fontVariantNumeric: 'tabular-nums' };
+            const inSt = { width: '100%', textAlign: 'center', fontWeight: 700, padding: '6px 4px', fontVariantNumeric: 'tabular-nums' };
             const splitRow = (label, vals, onCh, extra) => (
-              <div className="cat-min-row" style={{ gap: 6 }}>
-                <div style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 13 }}>{label}</div>
+              <div className="fin-split-row">
+                <div className="fin-split-label" style={{ fontWeight: 600, fontSize: 13 }}>{label}</div>
                 <input className="input" type="number" min="0" value={vals.mik ?? ''} placeholder="0"
                        onChange={(e) => onCh({ mik: e.target.value })} style={inSt} />
                 <input className="input" type="number" min="0" value={vals.koc ?? ''} placeholder="0"
                        onChange={(e) => onCh({ koc: e.target.value })} style={inSt} />
                 <input className="input" type="number" min="0" value={vals.sh ?? ''} placeholder="0"
                        onChange={(e) => onCh({ sh: e.target.value })} style={inSt} />
-                {extra || <span style={{ width: 28 }} />}
+                <span className="fin-split-extra">{extra || null}</span>
               </div>
             );
             const colHead = (
-              <div className="cat-min-row" style={{ gap: 6, borderBottom: '1px solid var(--line)', paddingBottom: 4 }}>
-                <div style={{ flex: 1 }} />
-                <div style={{ width: 86, textAlign: 'center', fontSize: 11.5, fontWeight: 700, color: BRANCHES[0]?.color }}>מיקדו</div>
-                <div style={{ width: 86, textAlign: 'center', fontSize: 11.5, fontWeight: 700, color: BRANCHES[1]?.color }}>כוכב</div>
-                <div style={{ width: 86, textAlign: 'center', fontSize: 11.5, fontWeight: 700 }} className="muted">משותף</div>
-                <span style={{ width: 28 }} />
+              <div className="fin-split-row fin-split-head">
+                <div className="fin-split-label" />
+                <div style={{ textAlign: 'center', fontSize: 11.5, fontWeight: 700, color: BRANCHES[0]?.color }}>מיקדו</div>
+                <div style={{ textAlign: 'center', fontSize: 11.5, fontWeight: 700, color: BRANCHES[1]?.color }}>כוכב</div>
+                <div style={{ textAlign: 'center', fontSize: 11.5, fontWeight: 700 }} className="muted">משותף</div>
+                <span className="fin-split-extra" />
               </div>
             );
             return (

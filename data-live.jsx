@@ -443,6 +443,10 @@ async function loadAllData() {
       purchase_count: n(r.purchase_count),
       transfer_count: n(r.transfer_count),
       external_clients: _jp(r.external_clients),
+      coupons: _jp(r.coupons),
+      coupons_count: n(r.coupons_count),
+      coupons_cost_excl: n(r.coupons_cost_excl),
+      coupons_value_incl: n(r.coupons_value_incl),
     };
   });
 
