@@ -490,6 +490,14 @@ async function loadAllData() {
     FIN_EXP.concat(FIN_INC).forEach((f) => { o[f] = n(row[f]); });
     o.totalExpense = FIN_EXP.reduce((a, f) => a + o[f], 0);
     o.totalIncome = FIN_INC.reduce((a, f) => a + o[f], 0);
+    // lines = פירוק פר-סניף (מיקדו/כוכב/משותף) + שורות מותאמות — נשמר מהעורך בהגדרות
+    o.lines = Array.isArray(row.lines) ? row.lines : [];
+    o.expMik = o.lines.filter(l => l.type === 'expense').reduce((a, l) => a + n(l.mikado), 0);
+    o.expKoc = o.lines.filter(l => l.type === 'expense').reduce((a, l) => a + n(l.kohav), 0);
+    o.expShared = o.lines.filter(l => l.type === 'expense').reduce((a, l) => a + n(l.shared), 0);
+    o.incMik = o.lines.filter(l => l.type === 'income').reduce((a, l) => a + n(l.mikado), 0);
+    o.incKoc = o.lines.filter(l => l.type === 'income').reduce((a, l) => a + n(l.kohav), 0);
+    o.incShared = o.lines.filter(l => l.type === 'income').reduce((a, l) => a + n(l.shared), 0);
     return o;
   };
   const FINANCE = { byMonth: {}, current: null };
@@ -540,10 +548,11 @@ async function loadAllData() {
       const h = EMPLOYEE_HOURS[`${emp.id}__${curMonth}`];
       if (!h) return;
       const reg = n(h.regular_hours), e125 = n(h.extra_hours_125), e150 = n(h.extra_hours_150);
-      if (reg + e125 + e150 === 0) return;
+      const travel = n(h.travel), bonus = n(h.bonus);
+      if (reg + e125 + e150 + travel + bonus === 0) return;
       _payWith++;
       const r = n(emp.hourly_rate);
-      const gross = reg * r + e125 * r * 1.25 + e150 * r * 1.5;
+      const gross = reg * r + e125 * r * 1.25 + e150 * r * 1.5 + bonus;  // בונוס נושא הפרשות
       const pension   = gross * n(emp.pension_pct) / 100;
       const severance = gross * n(emp.severance_pct) / 100;
       const fund      = emp.include_fund ? gross * n(emp.fund_pct) / 100 : 0;
@@ -554,7 +563,7 @@ async function loadAllData() {
       else if (gross <= HI) bituach = LO * 0.0355 + (gross - LO) * 0.076;
       else bituach = LO * 0.0355 + (HI - LO) * 0.076;
       _payGross += gross;
-      _payTotal += gross + pension + severance + fund + bituach;
+      _payTotal += gross + travel + pension + severance + fund + bituach;  // נסיעות בלי הפרשות
     });
     if (_payWith > 0) {
       FINANCE.current.salaries_calculated = Math.round(_payTotal);
@@ -635,13 +644,17 @@ window.calcPayroll = function (emp, hours) {
   const reg  = Number(hours.regular_hours)    || 0;
   const e125 = Number(hours.extra_hours_125)  || 0;
   const e150 = Number(hours.extra_hours_150)  || 0;
-  const gross = reg * r + e125 * r * 1.25 + e150 * r * 1.5;
+  const bonus  = Number(hours.bonus)  || 0;   // בונוס = שכר לכל דבר — נושא הפרשות
+  const travel = Number(hours.travel) || 0;   // נסיעות = החזר הוצאות — בלי הפרשות
+  const hoursGross = reg * r + e125 * r * 1.25 + e150 * r * 1.5;
+  const gross = hoursGross + bonus;
   const pension   = gross * (Number(emp.pension_pct)   || 0) / 100;
   const severance = gross * (Number(emp.severance_pct) || 0) / 100;
   const fund      = emp.include_fund ? gross * (Number(emp.fund_pct) || 0) / 100 : 0;
   const bituach   = window.calcBituachLeumi(gross);
   const additions = pension + severance + fund + bituach;
-  return { gross, pension, severance, fund, bituach, additions, total: gross + additions };
+  return { gross, hoursGross, bonus, travel, pension, severance, fund, bituach, additions,
+           total: gross + travel + additions };
 };
 
 // סיכום שכר לכל החודש (לחישוב KPI/דשבורד)
@@ -655,7 +668,7 @@ window.totalPayrollForMonth = function (month) {
     const reg = Number(h.regular_hours) || 0;
     const e125 = Number(h.extra_hours_125) || 0;
     const e150 = Number(h.extra_hours_150) || 0;
-    if (reg + e125 + e150 === 0) return;
+    if (reg + e125 + e150 + (Number(h.travel) || 0) + (Number(h.bonus) || 0) === 0) return;
     withHours++;
     const p = window.calcPayroll(emp, h);
     gross += p.gross;

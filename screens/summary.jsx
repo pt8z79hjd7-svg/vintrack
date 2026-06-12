@@ -939,8 +939,15 @@ const Monthly = ({ activeBranch = 'both' }) => {
                     <td style={{ ...numS, color: ext > 0 ? 'var(--accent-strong)' : 'var(--ink-3)' }}>
                       {ext > 0 ? `₪${Math.round(ext).toLocaleString('he-IL')}` : '—'}
                     </td>
-                    <td style={{ ...numS, color: exp > 0 ? 'var(--danger)' : 'var(--ink-3)' }}>
+                    <td style={{ ...numS, color: exp > 0 ? 'var(--danger)' : 'var(--ink-3)' }}
+                        title={(finRow.expMik || finRow.expKoc) ?
+                          `מיקדו ₪${Math.round(finRow.expMik).toLocaleString('he-IL')} · כוכב ₪${Math.round(finRow.expKoc).toLocaleString('he-IL')} · משותף ₪${Math.round(finRow.expShared).toLocaleString('he-IL')}` : undefined}>
                       {exp > 0 ? `₪${Math.round(exp).toLocaleString('he-IL')}` : '—'}
+                      {(finRow.expMik > 0 || finRow.expKoc > 0) && (
+                        <div className="muted" style={{ fontSize: 10 }}>
+                          מ׳ {Math.round(finRow.expMik / 1000)}K · כ׳ {Math.round(finRow.expKoc / 1000)}K
+                        </div>
+                      )}
                     </td>
                     <td style={{ ...numS, fontWeight: 800, color: netOK ? 'var(--ok)' : 'var(--danger)' }}>
                       ₪{Math.round(net).toLocaleString('he-IL')}

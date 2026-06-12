@@ -152,7 +152,8 @@ const Settings = ({ activeBranch = 'both' }) => {
   ];
   const curMonthKey = new Date().toISOString().slice(0, 7);
   const [finMonth, setFinMonth] = useState(curMonthKey);
-  const [finVals, setFinVals] = useState({});
+  const [finVals, setFinVals] = useState({});      // {k: {mik, koc, sh}} — פר-סניף + משותף
+  const [finLines, setFinLines] = useState([]);    // שורות מותאמות: [{id,label,type,mik,koc,sh}]
   const [finBusy, setFinBusy] = useState(false);
 
   // רשימת חודשים לבחירה — מתוך MONTHLY (12 אחרונים), כולל החודש הנוכחי
@@ -162,45 +163,94 @@ const Settings = ({ activeBranch = 'both' }) => {
     return Array.from(set).sort().reverse().slice(0, 18);
   }, [window.LAST_REFRESH]);
 
-  // אכלוס שדות מתוך FINANCE לפי החודש הנבחר
+  // אכלוס שדות מתוך FINANCE לפי החודש הנבחר.
+  // אם יש lines (פורמט פר-סניף) — טוען מהן; אחרת ערך-legacy נכנס לעמודת "משותף".
+  const _zeroSplit = () => ({ mik: '', koc: '', sh: '' });
   React.useEffect(() => {
     const row = (window.FINANCE?.byMonth || {})[finMonth] || {};
     const init = {};
-    FIN_EXP_FIELDS.concat(FIN_INC_FIELDS).forEach(f => {
-      init[f.k] = (row[f.k] != null && row[f.k] !== 0) ? row[f.k] : '';
-    });
+    const stdKeys = new Set(FIN_EXP_FIELDS.concat(FIN_INC_FIELDS).map(f => f.k));
+    FIN_EXP_FIELDS.concat(FIN_INC_FIELDS).forEach(f => { init[f.k] = _zeroSplit(); });
+    const custom = [];
+    const lines = Array.isArray(row.lines) ? row.lines : [];
+    if (lines.length) {
+      lines.forEach((ln, i) => {
+        const vals = { mik: ln.mikado || '', koc: ln.kohav || '', sh: ln.shared || '' };
+        if (ln.k && stdKeys.has(ln.k)) init[ln.k] = vals;
+        else custom.push({ id: ln.id || `c${i}`, label: ln.label || '', type: ln.type || 'expense', ...vals });
+      });
+    } else {
+      FIN_EXP_FIELDS.concat(FIN_INC_FIELDS).forEach(f => {
+        if (row[f.k]) init[f.k] = { mik: '', koc: '', sh: row[f.k] };
+      });
+    }
     init.notes = row.notes || '';
     setFinVals(init);
+    setFinLines(custom);
   }, [finMonth, window.LAST_REFRESH]);
 
-  // תצוגה מקדימה חיה: הוצאות, הכנסות, רווח גולמי (מ-MONTHLY), רווח נטו
+  const _splitSum = (v) => (Number(v?.mik) || 0) + (Number(v?.koc) || 0) + (Number(v?.sh) || 0);
+
+  // תצוגה מקדימה חיה: הוצאות, הכנסות (+פר-סניף), רווח גולמי (מ-MONTHLY), רווח נטו
   const finPreview = React.useMemo(() => {
-    const exp = FIN_EXP_FIELDS.reduce((a, f) => a + (Number(finVals[f.k]) || 0), 0);
-    const inc = FIN_INC_FIELDS.reduce((a, f) => a + (Number(finVals[f.k]) || 0), 0);
+    const expStd = FIN_EXP_FIELDS.reduce((a, f) => a + _splitSum(finVals[f.k]), 0);
+    const incStd = FIN_INC_FIELDS.reduce((a, f) => a + _splitSum(finVals[f.k]), 0);
+    const expCus = finLines.filter(l => l.type === 'expense').reduce((a, l) => a + _splitSum(l), 0);
+    const incCus = finLines.filter(l => l.type === 'income').reduce((a, l) => a + _splitSum(l), 0);
+    const exp = expStd + expCus, inc = incStd + incCus;
+    const _branchTot = (key) => FIN_EXP_FIELDS.reduce((a, f) => a + (Number(finVals[f.k]?.[key]) || 0), 0)
+      + finLines.filter(l => l.type === 'expense').reduce((a, l) => a + (Number(l[key]) || 0), 0);
     const M = (window.MONTHLY || []).find(x => x.month === finMonth) || null;
     const gross = M ? M.profit : 0;
     const revenue = M ? M.total : 0;
     const net = gross + inc - exp;
     const margin = revenue > 0 ? (net / revenue) * 100 : 0;
-    return { exp, inc, gross, revenue, net, margin, hasMonth: !!M };
-  }, [finVals, finMonth, window.LAST_REFRESH]);
+    return { exp, inc, gross, revenue, net, margin, hasMonth: !!M,
+             expMik: _branchTot('mik'), expKoc: _branchTot('koc'), expSh: _branchTot('sh') };
+  }, [finVals, finLines, finMonth, window.LAST_REFRESH]);
 
   const saveFinance = async () => {
     setFinBusy(true);
     const payload = { month: finMonth, notes: finVals.notes || '' };
-    FIN_EXP_FIELDS.concat(FIN_INC_FIELDS).forEach(f => { payload[f.k] = Number(finVals[f.k]) || 0; });
+    const lines = [];
+    FIN_EXP_FIELDS.concat(FIN_INC_FIELDS).forEach((f, idx) => {
+      const v = finVals[f.k] || {};
+      payload[f.k] = _splitSum(v);   // legacy total — תאימות לאחור (P&L, דשבורד)
+      lines.push({ k: f.k, label: f.label, type: FIN_EXP_FIELDS.includes(f) ? 'expense' : 'income',
+                   mikado: Number(v.mik) || 0, kohav: Number(v.koc) || 0, shared: Number(v.sh) || 0 });
+    });
+    finLines.forEach((l) => {
+      if (!l.label && _splitSum(l) === 0) return;
+      const amt = _splitSum(l);
+      lines.push({ id: l.id, label: l.label, type: l.type,
+                   mikado: Number(l.mik) || 0, kohav: Number(l.koc) || 0, shared: Number(l.sh) || 0 });
+      // שורות מותאמות נכנסות ל-other_expense / external_sales כדי שה-P&L הקיים יראה אותן
+      if (l.type === 'expense') payload.other_expense = (payload.other_expense || 0) + amt;
+      else payload.external_sales = (payload.external_sales || 0) + amt;
+    });
+    payload.lines = lines;
     // fallback ל-localStorage (מכשיר ראשי לפני הרצת SQL)
     try {
       const ls = JSON.parse(localStorage.getItem('vintrack_finance') || '{}');
       ls[finMonth] = payload;
       localStorage.setItem('vintrack_finance', JSON.stringify(ls));
     } catch { /* noop */ }
-    const { error } = await window.sb.from('monthly_finance').upsert(payload, { onConflict: 'month' });
+    let { error } = await window.sb.from('monthly_finance').upsert(payload, { onConflict: 'month' });
+    if (error && /lines/.test(error.message || '')) {
+      // עמודת lines עוד לא קיימת ב-DB — שומר בלעדיה (legacy totals עדיין נשמרים)
+      const { lines: _drop, ...legacy } = payload;
+      ({ error } = await window.sb.from('monthly_finance').upsert(legacy, { onConflict: 'month' }));
+      if (!error) (window.toast?.info || alert)('נשמר ללא פיצול-סניפים — הרץ את ה-SQL של עמודת lines');
+    }
     setFinBusy(false);
-    if (error) (window.toast?.info || alert)('נשמר במכשיר זה. ליצירת טבלת monthly_finance בסופאבייס (שיתוף בין מכשירים) הרץ את missing_tables.sql.');
+    if (error) (window.toast?.info || alert)('נשמר במכשיר זה. ליצירת טבלת monthly_finance בסופאבייס הרץ את missing_tables.sql.');
     else (window.toast?.success || alert)('✓ נתוני החודש נשמרו');
     setTimeout(() => window.refreshData && window.refreshData('finance-save'), 400);
   };
+
+  const addFinLine = (type) => setFinLines(ls => [...ls, { id: 'c' + Date.now(), label: '', type, mik: '', koc: '', sh: '' }]);
+  const updFinLine = (id, patch) => setFinLines(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l));
+  const delFinLine = (id) => setFinLines(ls => ls.filter(l => l.id !== id));
 
   const monthLabel = (mk) => {
     const [y, mo] = String(mk).split('-');
@@ -721,33 +771,71 @@ const Settings = ({ activeBranch = 'both' }) => {
             </select>
           </div>
 
-          {/* הוצאות */}
-          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: 'var(--danger)' }}>הוצאות (₪)</div>
-          <div className="cat-min-grid">
-            {FIN_EXP_FIELDS.map(f => (
-              <div key={f.k} className="cat-min-row">
-                <div style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 13 }}>{f.label}</div>
-                <input className="input" type="number" min="0" step="1"
-                       value={finVals[f.k] ?? ''} placeholder="0"
-                       onChange={(e) => setFinVals(v => ({ ...v, [f.k]: e.target.value }))}
-                       style={{ width: 110, textAlign: 'center', fontWeight: 700, padding: '6px 8px' }} />
+          {/* כותרת עמודות פר-סניף */}
+          {(() => {
+            const inSt = { width: 86, textAlign: 'center', fontWeight: 700, padding: '6px 6px', fontVariantNumeric: 'tabular-nums' };
+            const splitRow = (label, vals, onCh, extra) => (
+              <div className="cat-min-row" style={{ gap: 6 }}>
+                <div style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 13 }}>{label}</div>
+                <input className="input" type="number" min="0" value={vals.mik ?? ''} placeholder="0"
+                       onChange={(e) => onCh({ mik: e.target.value })} style={inSt} />
+                <input className="input" type="number" min="0" value={vals.koc ?? ''} placeholder="0"
+                       onChange={(e) => onCh({ koc: e.target.value })} style={inSt} />
+                <input className="input" type="number" min="0" value={vals.sh ?? ''} placeholder="0"
+                       onChange={(e) => onCh({ sh: e.target.value })} style={inSt} />
+                {extra || <span style={{ width: 28 }} />}
               </div>
-            ))}
-          </div>
+            );
+            const colHead = (
+              <div className="cat-min-row" style={{ gap: 6, borderBottom: '1px solid var(--line)', paddingBottom: 4 }}>
+                <div style={{ flex: 1 }} />
+                <div style={{ width: 86, textAlign: 'center', fontSize: 11.5, fontWeight: 700, color: BRANCHES[0]?.color }}>מיקדו</div>
+                <div style={{ width: 86, textAlign: 'center', fontSize: 11.5, fontWeight: 700, color: BRANCHES[1]?.color }}>כוכב</div>
+                <div style={{ width: 86, textAlign: 'center', fontSize: 11.5, fontWeight: 700 }} className="muted">משותף</div>
+                <span style={{ width: 28 }} />
+              </div>
+            );
+            return (
+              <React.Fragment>
+                {/* הוצאות */}
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: 'var(--danger)' }}>הוצאות (₪)</div>
+                <div className="cat-min-grid">
+                  {colHead}
+                  {FIN_EXP_FIELDS.map(f => splitRow(f.label, finVals[f.k] || {},
+                    (patch) => setFinVals(v => ({ ...v, [f.k]: { ...(v[f.k] || {}), ...patch } }))))}
+                  {finLines.filter(l => l.type === 'expense').map(l => splitRow(
+                    <input className="input" value={l.label} placeholder="שם ההוצאה…"
+                           onChange={(e) => updFinLine(l.id, { label: e.target.value })}
+                           style={{ width: '100%', padding: '5px 8px', fontSize: 13 }} />,
+                    l, (patch) => updFinLine(l.id, patch),
+                    <button className="btn btn-sm" onClick={() => delFinLine(l.id)} title="מחק שורה" style={{ width: 28, padding: 2 }}>✕</button>))}
+                </div>
+                <button className="btn btn-sm" style={{ marginTop: 6 }} onClick={() => addFinLine('expense')}>+ הוסף הוצאה</button>
 
-          {/* הכנסות חוץ-קופה */}
-          <div style={{ fontWeight: 700, fontSize: 13, margin: '16px 0 8px', color: 'var(--accent-strong)' }}>הכנסות חוץ-קופה (₪)</div>
-          <div className="cat-min-grid">
-            {FIN_INC_FIELDS.map(f => (
-              <div key={f.k} className="cat-min-row">
-                <div style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 13 }}>{f.label}</div>
-                <input className="input" type="number" min="0" step="1"
-                       value={finVals[f.k] ?? ''} placeholder="0"
-                       onChange={(e) => setFinVals(v => ({ ...v, [f.k]: e.target.value }))}
-                       style={{ width: 110, textAlign: 'center', fontWeight: 700, padding: '6px 8px' }} />
-              </div>
-            ))}
-          </div>
+                {/* הכנסות חוץ-קופה */}
+                <div style={{ fontWeight: 700, fontSize: 13, margin: '16px 0 8px', color: 'var(--accent-strong)' }}>הכנסות חוץ-קופה (₪)</div>
+                <div className="cat-min-grid">
+                  {colHead}
+                  {FIN_INC_FIELDS.map(f => splitRow(f.label, finVals[f.k] || {},
+                    (patch) => setFinVals(v => ({ ...v, [f.k]: { ...(v[f.k] || {}), ...patch } }))))}
+                  {finLines.filter(l => l.type === 'income').map(l => splitRow(
+                    <input className="input" value={l.label} placeholder="שם ההכנסה…"
+                           onChange={(e) => updFinLine(l.id, { label: e.target.value })}
+                           style={{ width: '100%', padding: '5px 8px', fontSize: 13 }} />,
+                    l, (patch) => updFinLine(l.id, patch),
+                    <button className="btn btn-sm" onClick={() => delFinLine(l.id)} title="מחק שורה" style={{ width: 28, padding: 2 }}>✕</button>))}
+                </div>
+                <button className="btn btn-sm" style={{ marginTop: 6 }} onClick={() => addFinLine('income')}>+ הוסף הכנסה</button>
+
+                {/* סיכום הוצאות פר-סניף */}
+                <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+                  הוצאות: מיקדו ₪{Math.round(finPreview.expMik).toLocaleString('he-IL')} ·
+                  כוכב ₪{Math.round(finPreview.expKoc).toLocaleString('he-IL')} ·
+                  משותף ₪{Math.round(finPreview.expSh).toLocaleString('he-IL')}
+                </div>
+              </React.Fragment>
+            );
+          })()}
 
           {/* תצוגה מקדימה — רווח נטו */}
           <div style={{ marginTop: 16, padding: 14, background: 'var(--surface-2, rgba(0,0,0,0.03))', borderRadius: 10,

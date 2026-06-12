@@ -44,6 +44,8 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
         reg:  h?.regular_hours    ?? '',
         e125: h?.extra_hours_125  ?? '',
         e150: h?.extra_hours_150  ?? '',
+        travel: h?.travel ?? '',
+        bonus:  h?.bonus  ?? '',
       };
     });
     setHoursLocal(init);
@@ -84,6 +86,8 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
       regular_hours:    Number(local.reg)  || 0,
       extra_hours_125:  Number(local.e125) || 0,
       extra_hours_150:  Number(local.e150) || 0,
+      travel: Number(local.travel) || 0,
+      bonus:  Number(local.bonus)  || 0,
       updated_at: new Date().toISOString(),
     };
     setSavingEmp(emp.id);
@@ -289,9 +293,11 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
         // חישובים לכל שורה
         const rows = emps.map((emp) => {
           const local = hoursLocal[emp.id] || {};
-          const h = { regular_hours: local.reg, extra_hours_125: local.e125, extra_hours_150: local.e150 };
+          const h = { regular_hours: local.reg, extra_hours_125: local.e125, extra_hours_150: local.e150,
+                      travel: local.travel, bonus: local.bonus };
           const p = window.calcPayroll(empRate(emp), h);
-          return { emp, h, p, hasInput: (Number(local.reg)||0) + (Number(local.e125)||0) + (Number(local.e150)||0) > 0 };
+          return { emp, h, p, hasInput: (Number(local.reg)||0) + (Number(local.e125)||0) + (Number(local.e150)||0)
+                                        + (Number(local.travel)||0) + (Number(local.bonus)||0) > 0 };
         });
         const sumGross = rows.reduce((a, r) => a + r.p.gross, 0);
         const sumAdd   = rows.reduce((a, r) => a + r.p.additions, 0);
@@ -338,8 +344,12 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
                                  (e) => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], e125: e.target.value } })))}
                             {fld('שעות ×1.5', local.e150,
                                  (e) => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], e150: e.target.value } })))}
+                            {fld('נסיעות (₪)', local.travel,
+                                 (e) => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], travel: e.target.value } })), 10)}
+                            {fld('בונוס (₪)', local.bonus,
+                                 (e) => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], bonus: e.target.value } })), 50)}
                             <div className="between" style={{ fontSize: 12.5 }}>
-                              <span>ברוטו: <b>{fmt(p.gross)}</b></span>
+                              <span>ברוטו: <b>{fmt(p.gross)}</b>{p.travel > 0 && <span className="muted"> +נסיעות {fmt(p.travel)}</span>}</span>
                               <span>הפרשות: <b>{fmt(p.additions)}</b></span>
                             </div>
                             <button className="btn btn-primary" style={{ minHeight: 44 }}
@@ -369,7 +379,7 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
           <Card title={`חישוב שכר — ${monthLabel(payrollMonth)}`}
                 sub="הזן שעות לכל עובד · ברוטו + הפרשות מעסיק מחושב אוטומטית">
             <div className="table-wrap">
-              <table className="tbl" style={{ minWidth: 920 }}>
+              <table className="tbl" style={{ minWidth: 1080 }}>
                 <thead>
                   <tr>
                     <th>עובד</th>
@@ -377,6 +387,8 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
                     <th style={tc}>רגילות</th>
                     <th style={tc}>×1.25</th>
                     <th style={tc}>×1.5</th>
+                    <th style={tc}>נסיעות ₪</th>
+                    <th style={tc}>בונוס ₪</th>
                     <th style={te}>ברוטו</th>
                     <th style={te}>הפרשות</th>
                     <th style={te}>עלות מעסיק</th>
@@ -419,7 +431,17 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
                                  onChange={e => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], e150: e.target.value } }))}
                                  style={{ width: 60, padding: '4px 6px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }} />
                         </td>
-                        <td style={{ ...te, fontWeight: 700 }}>{fmt(p.gross)}</td>
+                        <td style={tc}>
+                          <input className="input" type="number" min="0" step="10" value={local.travel ?? ''}
+                                 onChange={e => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], travel: e.target.value } }))}
+                                 style={{ width: 70, padding: '4px 6px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }} />
+                        </td>
+                        <td style={tc}>
+                          <input className="input" type="number" min="0" step="50" value={local.bonus ?? ''}
+                                 onChange={e => setHoursLocal(s => ({ ...s, [emp.id]: { ...s[emp.id], bonus: e.target.value } }))}
+                                 style={{ width: 70, padding: '4px 6px', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }} />
+                        </td>
+                        <td style={{ ...te, fontWeight: 700 }} title={p.travel > 0 ? `+ נסיעות ₪${Math.round(p.travel)} (ללא הפרשות)` : undefined}>{fmt(p.gross)}</td>
                         <td style={te} title={tipParts}>
                           <span style={{ color: 'var(--ink-2)', cursor: 'help', borderBottom: '1px dotted var(--ink-3)' }}>
                             {fmt(p.additions)}
@@ -440,7 +462,7 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
                 </tbody>
                 <tfoot>
                   <tr style={{ fontWeight: 700, borderTop: '2px solid var(--line)', background: 'var(--surface-2)' }}>
-                    <td colSpan={5} style={{ fontWeight: 700 }}>סה״כ</td>
+                    <td colSpan={7} style={{ fontWeight: 700 }}>סה״כ</td>
                     <td style={{ ...te, fontWeight: 700 }}>{fmt(sumGross)}</td>
                     <td style={{ ...te, fontWeight: 700 }}>{fmt(sumAdd)}</td>
                     <td style={{ ...te, fontWeight: 700, color: 'var(--danger)' }}>{fmt(sumTotal)}</td>
