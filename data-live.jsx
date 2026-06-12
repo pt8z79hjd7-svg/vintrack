@@ -57,6 +57,7 @@ Object.assign(window, {
   EMPLOYEES: [], EMPLOYEE_HOURS: {}, GENERIC_PRODUCTS: [], EXTERNAL_CLIENTS: [],
   SUPPLIER_PURCHASES: { byMonth: {}, all: [] }, SUPPLIER_TERMS: [],
   BARCODE_ALIAS: {},
+  VARIANT_GROUPS: [], VARIANT_BY_BARCODE: {},
 });
 
 // Supabase PostgREST max_rows = 1000. טוענים בדפים עד שנגמר.
@@ -79,7 +80,7 @@ async function fetchAll(table, select = '*', opts = {}) {
 
 async function loadAllData() {
   const sb = window.sb;
-  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR, empR, empHoursR, genR, extR, spR, supR, sentR] = await Promise.all([
+  const [products, monR, dayR, invRows, dealRows, transRows, ordRows, detR, appR, pcatR, ppromoR, setR, finR, empR, empHoursR, genR, extR, spR, supR, sentR, variantsCfg] = await Promise.all([
     fetchAll('products'),
     sb.from('monthly_summary').select('*'),
     sb.from('daily_summary').select('*').order('summary_date', { ascending: false }),
@@ -100,6 +101,7 @@ async function loadAllData() {
     sb.from('supplier_purchases').select('*'),   // רכש לפי ספק×חודש (נכתב ע"י הצינור) — graceful אם הטבלה חסרה
     sb.from('suppliers').select('*'),            // תנאי תשלום לספקים (מנוהל-אפליקציה) — graceful אם הטבלה חסרה
     sb.from('sent_orders').select('*').order('sent_at', { ascending: false }).limit(120),  // הזמנות שנשלחו — graceful אם הטבלה חסרה
+    fetch('product_variants.json?v=' + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null),  // קבוצות-גרסאות: ברקודים נפרדים שמייצגים אותו מוצר (שונה גודל/כשרות/וינטג')
   ]);
 
   // ─── אזהרה על טבלאות שנכשלו בטעינה (במקום silent || []) ───
@@ -600,6 +602,16 @@ async function loadAllData() {
     SUPPLIER_PURCHASES, SUPPLIER_TERMS,
     BARCODE_ALIAS: _barcodeAlias,
     PAST_ORDERS, LAST_RECEIVED, SENT_ORDERS, ORDER_RECS,
+    VARIANT_GROUPS: (variantsCfg?.['קבוצות'] || []),
+    VARIANT_BY_BARCODE: (() => {
+      const m = {};
+      for (const g of (variantsCfg?.['קבוצות'] || [])) {
+        for (const mem of (g.members || [])) {
+          m[String(mem.barcode)] = { group: g, label: mem.variant_label };
+        }
+      }
+      return m;
+    })(),
     LAST_REFRESH: Date.now(),
     LAST_DATA_SYNC: _lastSync || null,
   });

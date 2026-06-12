@@ -658,6 +658,42 @@ const ProductDetailModal = ({ product, onClose }) => {
           </div>
         ))}
 
+        {/* גרסאות — מוצרים נפרדים שמייצגים את אותו פריט (גודל/כשרות/וינטג'). מציג סיכום משולב. */}
+        {!isGen && (() => {
+          const v = (window.VARIANT_BY_BARCODE || {})[String(product.sku || product.id)];
+          if (!v) return null;
+          const all = (v.group.members || []).map(m => {
+            const p = (window.PRODUCTS || []).find(x => String(x.sku || x.id) === String(m.barcode));
+            const stock = p ? (p.stock.mikado + p.stock.kohav) : 0;
+            return { barcode: m.barcode, label: m.variant_label, stock, isCurrent: String(m.barcode) === String(product.sku || product.id) };
+          });
+          const combined = all.reduce((s, x) => s + x.stock, 0);
+          return (
+            <div style={{ background: 'var(--surface-2, #f6f7f9)', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+              <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>🍷 גרסאות של {v.group.group_name}</div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>סך משולב: <span style={{ color: 'var(--ok)' }}>{combined}</span> יח׳</div>
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {all.map(x => (
+                  <div key={x.barcode} className="row" style={{
+                    justifyContent: 'space-between', padding: '6px 10px',
+                    background: x.isCurrent ? 'var(--accent-soft, #e7f5ee)' : 'var(--surface, #fff)',
+                    borderRadius: 8, fontSize: 13,
+                  }}>
+                    <div>
+                      {x.isCurrent && <span style={{ marginInlineEnd: 6 }}>▶</span>}
+                      <span style={{ fontWeight: 600 }}>{x.label}</span>
+                      <span className="muted" style={{ marginInlineStart: 8, fontSize: 11 }}>{x.barcode}</span>
+                    </div>
+                    <span className={`stock-pill stock-${x.stock < 0 ? 'danger' : x.stock === 0 ? 'warn' : 'ok'}`}>{x.stock}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Totals — לא רלוונטי לפריט כללי */}
         {!isGen && (
           <div className="total-strip">
