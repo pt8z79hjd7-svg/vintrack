@@ -658,21 +658,32 @@ const ProductDetailModal = ({ product, onClose }) => {
           </div>
         ))}
 
-        {/* גרסאות — מוצרים נפרדים שמייצגים את אותו פריט (גודל/כשרות/וינטג'). מציג סיכום משולב. */}
+        {/* גרסאות — מוצרים נפרדים של אותו פריט (אריזה/כשרות). סך משולב בבודדים לפי unit_multiplier. */}
         {!isGen && (() => {
           const v = (window.VARIANT_BY_BARCODE || {})[String(product.sku || product.id)];
           if (!v) return null;
           const all = (v.group.members || []).map(m => {
             const p = (window.PRODUCTS || []).find(x => String(x.sku || x.id) === String(m.barcode));
-            const stock = p ? (p.stock.mikado + p.stock.kohav) : 0;
-            return { barcode: m.barcode, label: m.variant_label, stock, isCurrent: String(m.barcode) === String(product.sku || product.id) };
+            const mult = Number(m.unit_multiplier) || 1;
+            const mk = p ? p.stock.mikado : 0;
+            const kc = p ? p.stock.kohav : 0;
+            return { barcode: m.barcode, label: m.variant_label, mult, mk, kc,
+                     units: (mk + kc) * mult,
+                     isCurrent: String(m.barcode) === String(product.sku || product.id) };
           });
-          const combined = all.reduce((s, x) => s + x.stock, 0);
+          const combMk = all.reduce((s, x) => s + x.mk * x.mult, 0);
+          const combKc = all.reduce((s, x) => s + x.kc * x.mult, 0);
+          const unit = v.group.unified_unit || 'בודדים';
           return (
             <div style={{ background: 'var(--surface-2, #f6f7f9)', borderRadius: 12, padding: 12, marginBottom: 12 }}>
-              <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+              <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>🍷 גרסאות של {v.group.group_name}</div>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>סך משולב: <span style={{ color: 'var(--ok)' }}>{combined}</span> יח׳</div>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>
+                  סך משולב: <span style={{ color: 'var(--ok)' }}>{combMk + combKc}</span> {unit}
+                </div>
+              </div>
+              <div className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>
+                מיקדו {combMk} · כוכב {combKc} ({unit})
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 {all.map(x => (
@@ -684,9 +695,17 @@ const ProductDetailModal = ({ product, onClose }) => {
                     <div>
                       {x.isCurrent && <span style={{ marginInlineEnd: 6 }}>▶</span>}
                       <span style={{ fontWeight: 600 }}>{x.label}</span>
+                      {x.mult > 1 && <span className="muted" style={{ marginInlineStart: 6, fontSize: 11 }}>(×{x.mult})</span>}
                       <span className="muted" style={{ marginInlineStart: 8, fontSize: 11 }}>{x.barcode}</span>
                     </div>
-                    <span className={`stock-pill stock-${x.stock < 0 ? 'danger' : x.stock === 0 ? 'warn' : 'ok'}`}>{x.stock}</span>
+                    <div style={{ textAlign: 'end' }}>
+                      <span className={`stock-pill stock-${(x.mk + x.kc) < 0 ? 'danger' : (x.mk + x.kc) === 0 ? 'warn' : 'ok'}`}>
+                        מ׳{x.mk} · כ׳{x.kc}
+                      </span>
+                      {x.mult > 1 && (x.mk + x.kc) !== 0 && (
+                        <div className="muted" style={{ fontSize: 10.5 }}>= {x.units} {unit}</div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

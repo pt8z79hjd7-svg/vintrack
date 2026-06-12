@@ -1,5 +1,5 @@
 {
-  "_הסבר": "קבוצות מוצר-עם-גרסאות: ברקודים נפרדים שמייצגים את אותו \"מוצר\" עם הבדל (גודל, כשרות, וינטג', ייבוא). הצינור לא מאחד אותם — stock נשאר נפרד. ה-UI מציג בכרטיס סיכום של כל הגרסאות. ראשי = הברקוד שיוצג קודם.",
+  "_הסבר": "קבוצות מוצר-עם-גרסאות: ברקודים נפרדים של אותו מוצר (אריזה/כשרות). unit_multiplier = כמה בודדים בכל יחידה (רביעייה=4, שישייה=6, ארגז=24). ה-stock נשאר נפרד פר-ברקוד; הכרטיס מציג סך משולב בבודדים. primary = הבודד.",
   "קבוצות": [
     {
       "primary": "8006220001669",
@@ -7,11 +7,131 @@
       "members": [
         {
           "barcode": "8006220001669",
-          "variant_label": "כתום 750"
+          "variant_label": "כתום 750",
+          "unit_multiplier": 1
         },
         {
           "barcode": "8006220005230",
-          "variant_label": "כשר 750"
+          "variant_label": "כשר 750",
+          "unit_multiplier": 1
+        }
+      ],
+      "unified_unit": "בקבוקים"
+    },
+    {
+      "primary": "5940541218081",
+      "group_name": "בירה מיתוס פח 500",
+      "unified_unit": "בודדים",
+      "members": [
+        {
+          "barcode": "5940541218081",
+          "variant_label": "בודד",
+          "unit_multiplier": 1
+        },
+        {
+          "barcode": "5940541218210",
+          "variant_label": "רביעייה",
+          "unit_multiplier": 4
+        },
+        {
+          "barcode": "2520130963891",
+          "variant_label": "ארגז",
+          "unit_multiplier": 24
+        }
+      ]
+    },
+    {
+      "primary": "5201309638375",
+      "group_name": "בירה מיתוס בק 330",
+      "unified_unit": "בודדים",
+      "members": [
+        {
+          "barcode": "5201309638375",
+          "variant_label": "בודד",
+          "unit_multiplier": 1
+        },
+        {
+          "barcode": "5201309638399",
+          "variant_label": "שישייה",
+          "unit_multiplier": 6
+        },
+        {
+          "barcode": "5201309633857",
+          "variant_label": "ארגז",
+          "unit_multiplier": 24
+        }
+      ]
+    },
+    {
+      "primary": "786150000274",
+      "group_name": "בירה לף בראון 330",
+      "unified_unit": "בודדים",
+      "members": [
+        {
+          "barcode": "786150000274",
+          "variant_label": "בודד",
+          "unit_multiplier": 1
+        },
+        {
+          "barcode": "786150000281",
+          "variant_label": "שישייה",
+          "unit_multiplier": 6
+        }
+      ]
+    },
+    {
+      "primary": "7290019398288",
+      "group_name": "בירה סטלה 330",
+      "unified_unit": "בודדים",
+      "members": [
+        {
+          "barcode": "7290019398288",
+          "variant_label": "בודד",
+          "unit_multiplier": 1
+        },
+        {
+          "barcode": "7290019398233",
+          "variant_label": "שישייה",
+          "unit_multiplier": 6
+        }
+      ]
+    },
+    {
+      "primary": "7290019398264",
+      "group_name": "בירה קורונה 355",
+      "unified_unit": "בודדים",
+      "members": [
+        {
+          "barcode": "7290019398264",
+          "variant_label": "בקבוק בודד",
+          "unit_multiplier": 1
+        },
+        {
+          "barcode": "7501064191527",
+          "variant_label": "שישייה",
+          "unit_multiplier": 6
+        },
+        {
+          "barcode": "7501064191459",
+          "variant_label": "ארגז",
+          "unit_multiplier": 24
+        }
+      ]
+    },
+    {
+      "primary": "1234567890000",
+      "group_name": "בירה נועם",
+      "unified_unit": "בודדים",
+      "members": [
+        {
+          "barcode": "1234567890000",
+          "variant_label": "בודד",
+          "unit_multiplier": 1
+        },
+        {
+          "barcode": "963852",
+          "variant_label": "ארגז",
+          "unit_multiplier": 24
         }
       ]
     }
