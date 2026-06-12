@@ -182,7 +182,7 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
     purchase_count = 0, transfer_count = 0,
     returns = [], returns_count = 0, returns_net_total = 0,
     external_clients = [],
-    coupons = [], coupons_count = 0, coupons_cost_excl = 0 } = det;
+    coupons = [], coupons_count = 0, coupons_cost_excl = 0, coupons_value_incl = 0 } = det;
   const promoEntries = Object.entries(promo_stats).filter(([, v]) => v > 0);
   // הנחות מועדון — סיכום פר סניף (₪ + עסקאות)
   const _cds = club_discount_summary || {};
@@ -514,8 +514,8 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
 
       {/* 🎟️ קופונים (זיכוי-עתיד מאספיריט) */}
       {coupons_count > 0 && (
-        <Card title="🎟️ קופונים — זיכוי-עתיד מאספיריט"
-              sub={`${coupons_count} בקבוקים חולקו בחינם · עלות מצטברת ₪${Math.round(coupons_cost_excl).toLocaleString('he-IL')} (יזוכה בסוף חודש)`}>
+        <Card title="🎟️ שוברים — זיכוי-עתיד מאספיריט"
+              sub={`${coupons_count} בקבוקים מומשו · שווי-מכירה ₪${Math.round(coupons_value_incl).toLocaleString('he-IL')} · עלות ₪${Math.round(coupons_cost_excl).toLocaleString('he-IL')} (יזוכה בסוף חודש)`}>
           <div className="table-wrap">
             <table className="tbl">
               <thead>
@@ -542,8 +542,14 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
               </tbody>
             </table>
           </div>
+          <div style={{ padding: '8px 8px 0', fontSize: 13, fontWeight: 700 }}>
+            🧾 קופה כולל שוברים: ₪{Math.round((det.total_revenue || 0) + coupons_value_incl).toLocaleString('he-IL')}
+            <span className="muted" style={{ fontWeight: 400, marginInlineStart: 6 }}>
+              (מחזור ₪{Math.round(det.total_revenue || 0).toLocaleString('he-IL')} + שוברים ₪{Math.round(coupons_value_incl).toLocaleString('he-IL')})
+            </span>
+          </div>
           <div className="muted" style={{ fontSize: 12, padding: 8 }}>
-            ℹ️ קופונים = לקוחות שקיבלו בקבוק בחינם. הכסף לא נכנס לקופה היום — נקבל זיכוי מאספיריט לפי מחיר-עלות בסוף חודש.
+            ℹ️ שוברים = לקוחות שקיבלו בקבוק בחינם. הכסף לא נכנס לקופה היום — נקבל זיכוי מאספיריט לפי מחיר-עלות בסוף חודש.
           </div>
         </Card>
       )}
