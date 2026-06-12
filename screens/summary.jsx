@@ -181,7 +181,8 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
     new_products = [], promo_stats = {}, incoming_purchases = [], incoming_transfers = [],
     purchase_count = 0, transfer_count = 0,
     returns = [], returns_count = 0, returns_net_total = 0,
-    external_clients = [] } = det;
+    external_clients = [],
+    coupons = [], coupons_count = 0, coupons_cost_excl = 0 } = det;
   const promoEntries = Object.entries(promo_stats).filter(([, v]) => v > 0);
   // הנחות מועדון — סיכום פר סניף (₪ + עסקאות)
   const _cds = club_discount_summary || {};
@@ -507,6 +508,42 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
           </div>
           <div style={{ padding: '10px 18px', borderTop: '1px solid var(--line)', fontSize: 12, color: 'var(--ink-3)' }}>
             ℹ️ פריטים שהוחזרו (↩) חזרו אוטומטית למלאי במחזור הבא. פריטים שניתנו בהחלפה (+) ירדו מהמלאי.
+          </div>
+        </Card>
+      )}
+
+      {/* 🎟️ קופונים (זיכוי-עתיד מאספיריט) */}
+      {coupons_count > 0 && (
+        <Card title="🎟️ קופונים — זיכוי-עתיד מאספיריט"
+              sub={`${coupons_count} בקבוקים חולקו בחינם · עלות מצטברת ₪${Math.round(coupons_cost_excl).toLocaleString('he-IL')} (יזוכה בסוף חודש)`}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>מוצר</th>
+                  <th style={{ textAlign: 'end' }}>כמות</th>
+                  <th style={{ textAlign: 'end' }}>עלות ליחידה (ללא מע״מ)</th>
+                  <th style={{ textAlign: 'end' }}>סה״כ עלות</th>
+                  <th>סניף</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(coupons || []).map((c, i) => (
+                  <tr key={i}>
+                    <td style={{ fontWeight: 500 }}>{c.name}</td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>{c.qty}</td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>₪{(c.cost_excl_per_unit || 0).toFixed(2)}</td>
+                    <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: 'var(--ok)' }}>
+                      ₪{((c.cost_excl_per_unit || 0) * (c.qty || 0)).toFixed(0)}
+                    </td>
+                    <td>{c.branch}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="muted" style={{ fontSize: 12, padding: 8 }}>
+            ℹ️ קופונים = לקוחות שקיבלו בקבוק בחינם. הכסף לא נכנס לקופה היום — נקבל זיכוי מאספיריט לפי מחיר-עלות בסוף חודש.
           </div>
         </Card>
       )}
