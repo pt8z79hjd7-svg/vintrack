@@ -193,8 +193,43 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
   const _branchHe = activeBranch === 'mikado' ? 'מיקדו' : activeBranch === 'kohav' ? 'כוכב הצפון' : null;
   const _discAnom = (discount_anomalies || []).filter(x => !_branchHe || x.branch === _branchHe);
 
+  // התאמה לקופה: מחזור-נטו (אפליקציה) + הקפה B2B (פורטונה) + שוברים = גולמי קופה (דוח-Z)
+  const _b2b = (external_clients || [])
+    .filter(e => e.kind === 'related' || (e.pays_at_cost && e.kind !== 'delivery'))
+    .reduce((a, e) => a + (Number(e.doc_total) || Number(e.retail_incl) || 0), 0);
+  const _net = det.total_revenue || 0;
+  const _grossCashier = _net + _b2b + (coupons_value_incl || 0);
+
   return (
     <>
+      {/* 🧾 התאמה לקופה — מחזור-נטו → גולמי דוח-Z */}
+      {(_b2b > 0 || coupons_value_incl > 0) && (
+        <Card title="🧾 התאמה לקופה" sub="מחזור-החנות (נטו) → גולמי דוח-Z של הקופה">
+          <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14 }}>
+            <div className="between"><span>מחזור-חנות נטו (אפליקציה)</span><b style={{ fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(_net).toLocaleString('he-IL')}</b></div>
+            {_b2b > 0 && (
+              <div className="between" style={{ color: 'var(--accent-strong)' }}>
+                <span>+ פורטונה / הקפה B2B <span className="muted" style={{ fontSize: 11 }}>(תשלום סוף-חודש)</span></span>
+                <b style={{ fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(_b2b).toLocaleString('he-IL')}</b>
+              </div>
+            )}
+            {coupons_value_incl > 0 && (
+              <div className="between" style={{ color: 'var(--accent-strong)' }}>
+                <span>+ שוברים <span className="muted" style={{ fontSize: 11 }}>(זיכוי אספיריט)</span></span>
+                <b style={{ fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(coupons_value_incl).toLocaleString('he-IL')}</b>
+              </div>
+            )}
+            <div className="between" style={{ borderTop: '2px solid var(--line)', paddingTop: 6, marginTop: 2, fontWeight: 800 }}>
+              <span>= גולמי קופה (דוח-Z)</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(_grossCashier).toLocaleString('he-IL')}</span>
+            </div>
+          </div>
+          <div className="muted" style={{ fontSize: 12, padding: '0 14px 10px', lineHeight: 1.5 }}>
+            ℹ️ האפליקציה מציגה <b>מחזור-נטו</b> — רק כסף שנכנס היום. פורטונה (הקפה) ושוברים נכנסים סוף-חודש ולכן מופרדים. דוח-Z של הקופה מציג את הגולמי.
+          </div>
+        </Card>
+      )}
+
       {/* 🏆 מובילי היום */}
       {top_sellers.length > 0 && (
         <Card title="🏆 מובילי היום" sub={`${top_sellers.length} מוצרים מובילים לפי הכנסה`}>
@@ -542,14 +577,8 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
               </tbody>
             </table>
           </div>
-          <div style={{ padding: '8px 8px 0', fontSize: 13, fontWeight: 700 }}>
-            🧾 קופה כולל שוברים: ₪{Math.round((det.total_revenue || 0) + coupons_value_incl).toLocaleString('he-IL')}
-            <span className="muted" style={{ fontWeight: 400, marginInlineStart: 6 }}>
-              (מחזור ₪{Math.round(det.total_revenue || 0).toLocaleString('he-IL')} + שוברים ₪{Math.round(coupons_value_incl).toLocaleString('he-IL')})
-            </span>
-          </div>
           <div className="muted" style={{ fontSize: 12, padding: 8 }}>
-            ℹ️ שוברים = לקוחות שקיבלו בקבוק בחינם. הכסף לא נכנס לקופה היום — נקבל זיכוי מאספיריט לפי מחיר-עלות בסוף חודש.
+            ℹ️ שוברים = לקוחות שקיבלו בקבוק בחינם. הכסף לא נכנס לקופה היום — נקבל זיכוי מאספיריט לפי מחיר-עלות בסוף חודש. (מופיע ב"התאמה לקופה" למעלה.)
           </div>
         </Card>
       )}
@@ -827,6 +856,48 @@ const Monthly = ({ activeBranch = 'both' }) => {
                   })}
                 </tbody>
               </table>
+            </div>
+          </Card>
+        );
+      })()}
+
+      {/* 🧾 התאמה לקופה — חודשי (מחזור-נטו → גולמי דוח-Z) */}
+      {(() => {
+        if (!curM) return null;
+        const dd = window.DAILY_DETAILS || {};
+        let net = 0, b2b = 0, coup = 0;
+        Object.keys(dd).forEach((dt) => {
+          if (dt.slice(0, 7) !== curM.month) return;
+          const d = dd[dt];
+          net += d.total_revenue || 0;
+          coup += d.coupons_value_incl || 0;
+          (d.external_clients || []).forEach((e) => {
+            if (e.kind === 'related' || (e.pays_at_cost && e.kind !== 'delivery')) {
+              b2b += Number(e.doc_total) || Number(e.retail_incl) || 0;
+            }
+          });
+        });
+        if (b2b <= 0 && coup <= 0) return null;
+        const gross = net + b2b + coup;
+        const line = (label, val, color, hint) => (
+          <div className="between" style={{ fontSize: 14, ...(color ? { color } : {}) }}>
+            <span>{label}{hint && <span className="muted" style={{ fontSize: 11, marginInlineStart: 4 }}>{hint}</span>}</span>
+            <b style={{ fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(val).toLocaleString('he-IL')}</b>
+          </div>
+        );
+        return (
+          <Card title="🧾 התאמה לקופה — חודשי" sub={`${curM.m} · מחזור-נטו ↔ גולמי דוח-Z`}>
+            <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {line('מחזור-חנות נטו (אפליקציה)', net)}
+              {b2b > 0 && line('+ פורטונה / הקפה B2B', b2b, 'var(--accent-strong)', '(תשלום סוף-חודש)')}
+              {coup > 0 && line('+ שוברים', coup, 'var(--accent-strong)', '(זיכוי אספיריט)')}
+              <div className="between" style={{ borderTop: '2px solid var(--line)', paddingTop: 6, marginTop: 2, fontWeight: 800, fontSize: 15 }}>
+                <span>= גולמי קופה (דוח-Z)</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(gross).toLocaleString('he-IL')}</span>
+              </div>
+            </div>
+            <div className="muted" style={{ fontSize: 12, padding: '0 14px 10px', lineHeight: 1.5 }}>
+              ℹ️ הפער מול דוח-Z = פורטונה (הקפה, נכנס סוף-חודש) + שוברים (זיכוי אספיריט). שניהם כסף אמיתי שלא נכנס לקופה ביום המכירה.
             </div>
           </Card>
         );
