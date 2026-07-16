@@ -4,6 +4,9 @@ const _vatM       = () => (window.vatMult     ? window.vatMult()     : 1.18);
 const _vatMOpp    = () => (window.vatMultOpp  ? window.vatMultOpp()  : 1);
 const _vatLbl     = () => (window.vatLabel    ? window.vatLabel()    : 'כולל מע״מ');
 const _vatLblOpp  = () => (window.vatLabelOpp ? window.vatLabelOpp() : 'ללא מע״מ');
+// top_sellers.revenue נשמר *כולל* מע"מ (סכום "סה״כ" מהחשבונית), בניגוד לשדות המחזור
+// שנשמרים ללא מע"מ ומוכפלים ב-_vatM(). ההמרה הזו מתאימה ערך כולל-מע"מ לתצוגה הפעילה.
+const _inclToDisp = (v) => (v || 0) * _vatM() / 1.18;
 
 // פריט כללי (05) — קירור = 100% רווח (לא דורש עלות)
 const _SUM_COOLING = ['קירור', 'קר', 'מקרר', 'קרה', 'קרר'];
@@ -183,7 +186,16 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
     returns = [], returns_count = 0, returns_net_total = 0,
     external_clients = [],
     coupons = [], coupons_count = 0, coupons_cost_excl = 0, coupons_value_incl = 0 } = det;
-  const promoEntries = Object.entries(promo_stats).filter(([, v]) => v > 0);
+  // promo_stats תומך בשני פורמטים:
+  //   ישן (עד 07/2026): שם → מספר שורות (דו-משמעי — שורה בכמות 3 נספרה כ-1)
+  //   חדש:              שם → {deals, units}
+  // ההיסטוריה ב-Supabase שמורה בפורמט הישן, ולכן שניהם חייבים להיתמך.
+  const promoEntries = Object.entries(promo_stats).map(function (e) {
+    const name = e[0];
+    const v = e[1];
+    if (v && typeof v === 'object') return { name: name, deals: v.deals || 0, units: v.units || 0 };
+    return { name: name, deals: 0, units: Number(v) || 0 };   // ישן: אין ספירת עסקאות
+  }).filter(function (p) { return p.deals > 0 || p.units > 0; });
   // הנחות מועדון — סיכום פר סניף (₪ + עסקאות)
   const _cds = club_discount_summary || {};
   const _clubMik = _cds.mikado || { total: 0, count: 0 };
@@ -241,7 +253,7 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
                   <th>מוצר</th>
                   <th style={{ textAlign: 'end' }}>כמות</th>
                   <th style={{ textAlign: 'end' }}>הכנסה ({_vatLbl()})</th>
-                  <th style={{ textAlign: 'end' }}>מבצע</th>
+                  <th style={{ textAlign: 'end' }}>מחיר ליח׳ בפועל</th>
                 </tr>
               </thead>
               <tbody>
@@ -249,9 +261,13 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
                   const promo = s.barcode ? (window.PROMO_BY_BARCODE || {})[String(s.barcode)] : null;
                   const prod = s.barcode ? (window.PRODUCTS || []).find(p => p.sku === String(s.barcode)) : null;
                   const cost = prod?.cost || 0;
-                  const promoNet = promo ? promo.unit_price_net : null;
-                  const realProfit = promoNet && cost ? (promoNet - cost) : null;
-                  const realMargin = promoNet && promoNet > 0 ? ((promoNet - cost) / promoNet * 100) : null;
+                  // המחיר שנגבה בפועל — כולל כל הנחה/מבצע. revenue כולל מע"מ, qty יחידות.
+                  // לא להשתמש ב-promo.unit_price: זה מחיר *מוגדר* מ-product_promos, ולמוצרי
+                  // מבצע-עלות הוא שווה לעלות — משם הגיע הבאג של "מחיר עלות בדוח היומי".
+                  const unitIncl = s.qty > 0 ? s.revenue / s.qty : null;
+                  const unitNet = unitIncl != null ? unitIncl / 1.18 : null;
+                  const realProfit = unitNet != null && cost ? (unitNet - cost) : null;
+                  const realMargin = unitNet && unitNet > 0 && cost ? ((unitNet - cost) / unitNet * 100) : null;
                   return (
                     <tr key={i}>
                       <td style={{ fontWeight: 700, color: i < 3 ? 'var(--accent)' : 'var(--ink-3)' }}>{i + 1}</td>
@@ -260,11 +276,11 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
                         {promo && <span className="badge accent" style={{ marginInlineStart: 6, fontSize: 10 }}>🏷️ {promo.name}</span>}
                       </td>
                       <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums' }}>{s.qty}</td>
-                      <td style={{ textAlign: 'end', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>₪{s.revenue?.toLocaleString('he-IL')}</td>
+                      <td style={{ textAlign: 'end', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>₪{Math.round(_inclToDisp(s.revenue)).toLocaleString('he-IL')}</td>
                       <td style={{ textAlign: 'end', fontSize: 12 }}>
-                        {promo ? (
-                          <span title={`מחיר ליח׳: ₪${promo.unit_price?.toFixed(0)} | רווח: ₪${realProfit?.toFixed(0)} | מרווח: ${realMargin?.toFixed(0)}%`}>
-                            <span style={{ fontWeight: 600 }}>₪{promo.unit_price?.toFixed(0)}</span>
+                        {unitIncl != null ? (
+                          <span title={`מחיר ממוצע ליח׳ שנגבה בפועל (${_vatLbl()})` + (cost ? ` | עלות: ₪${cost.toFixed(2)} | רווח ליח׳: ₪${realProfit?.toFixed(1)} | מרווח: ${realMargin?.toFixed(0)}%` : ' | אין עלות במערכת')}>
+                            <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>₪{_inclToDisp(unitIncl).toFixed(0)}</span>
                             {realMargin != null && <span className={`badge ${realMargin >= 25 ? 'ok' : 'warn'}`} style={{ marginInlineStart: 4 }}>{realMargin.toFixed(0)}%</span>}
                           </span>
                         ) : '—'}
@@ -293,12 +309,12 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
               <div style={{ padding: '12px 16px 4px', fontSize: 12, color: 'var(--ink-3)', fontWeight: 600 }}>זוהו בחשבוניות:</div>
             )}
             <div style={{ padding: '4px 16px 12px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {promoEntries.map(([name, count]) => (
-                <div key={name} style={{
+              {promoEntries.map(p => (
+                <div key={p.name} style={{
                   padding: '8px 14px', borderRadius: 'var(--r-md)', background: 'var(--accent-soft)',
                   color: 'var(--accent)', fontWeight: 600, fontSize: 13
                 }}>
-                  {name}: {count} פריטים
+                  {p.name}: {p.deals > 0 ? `${p.deals} מבצעים · ${p.units} בקבוקים` : `${p.units} פריטים`}
                 </div>
               ))}
               {promoEntries.length === 0 && <span className="muted" style={{ fontSize: 13 }}>לא זוהו מבצעים אוטומטיים ביום זה</span>}

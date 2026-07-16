@@ -2,11 +2,23 @@
 const Sales = ({ activeBranch = 'both', onOpen }) => {
   useLiveData();   // re-render אחרי refreshData
   const P = (window.PRODUCTS || []).filter((p) => p.total > 0 || (p.weekly || 0) > 0);
-  // מחיר אפקטיבי = מבצע לקוחות ידני (אם משויך) → ממוצע משוקלל 30 ימים → מחיר רשמי
-  const effPrice = (p) => (p.promo && p.promo.unit_price_net) || p.effective_sell_price || p.price || 0;
-  const hasEff = (p) => { const ep = effPrice(p); return ep > 0 && Math.abs(ep - (p.price || 0)) > 0.5; };
-  const ppu = (p) => effPrice(p) - (p.cost || 0);            // רווח ליחידה — לפי מחיר אפקטיבי
-  const effMargin = (p) => { const ep = effPrice(p); return ep > 0 ? ((ep - (p.cost || 0)) / ep) * 100 : 0; };
+  // מחיר אפקטיבי — "מה שנגבה בפועל".
+  // סדר: ממוצע משוקלל 30 ימים (כבר מגלם מבצעים דרך analyze) → מבצע לקוחות מוגדר → מחיר רשמי.
+  // אסור להעדיף את p.promo.unit_price_net: זה מחיר *מוגדר*, ולמוצרי מבצע-עלות הוא שווה
+  // לעלות — אותו באג שהראה "מחיר עלות" בדוח היומי.
+  //
+  // שני בסיסים, בכוונה: Incl להצגה ולהשוואה מול p.price (שכולל מע"מ),
+  // Net לחישוב רווח/מרווח מול p.cost (שהיא ללא מע"מ). ערבוב ביניהם ניפח מרווחים ב-~18%.
+  const effPriceIncl = (p) => {
+    if ((p.effective_sell_price || 0) > 0) return p.effective_sell_price;
+    if (p.promo && p.promo.unit_price_net) return p.promo.unit_price_net * 1.18;
+    return p.price || 0;
+  };
+  const effPriceNet = (p) => effPriceIncl(p) / 1.18;
+  const effPrice = effPriceIncl;                              // תצוגה: כולל מע"מ, כמו "מחיר רשמי"
+  const hasEff = (p) => { const ep = effPriceIncl(p); return ep > 0 && Math.abs(ep - (p.price || 0)) > 0.5; };
+  const ppu = (p) => effPriceNet(p) - (p.cost || 0);          // רווח ליחידה — שני האגפים ללא מע"מ
+  const effMargin = (p) => { const ep = effPriceNet(p); return ep > 0 ? ((ep - (p.cost || 0)) / ep) * 100 : 0; };
   const wprofit = (p) => (p.weekly || 0) * ppu(p);           // רווח שבועי משוער ₪
 
   const [view, setView] = useState('money');
