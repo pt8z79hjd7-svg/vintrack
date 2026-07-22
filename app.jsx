@@ -9,6 +9,7 @@ const NAV_HUBS = [
     { id: 'stock',    label: 'מלאי',          Icon: IBox },
     { id: 'new',      label: 'מוצרים חדשים',  Icon: IPlus },
     { id: 'analysis', label: 'ניתוח',         Icon: IPercent },
+    { id: 'dead',     label: 'מלאי מת',       Icon: ITag },
   ] },
   { id: 'ops',       label: 'תפעול',   Icon: ITruck, subs: [
     { id: 'orders',    label: 'הזמנות',  Icon: ITruck },
@@ -31,6 +32,7 @@ const NAV_ALIAS = {
   inventory:        { hub: 'inventory', sub: 'stock' },
   'new-products':   { hub: 'inventory', sub: 'new' },
   analysis:         { hub: 'inventory', sub: 'analysis' },
+  'dead-stock':     { hub: 'inventory', sub: 'dead' },
   orders:           { hub: 'ops',       sub: 'orders' },
   transfers:        { hub: 'ops',       sub: 'transfers' },
   promos:           { hub: 'ops',       sub: 'promos' },
@@ -377,6 +379,7 @@ function App() {
         {hub === 'inventory' && sub === 'stock'    && <Inventory onOpen={handleOpen} onOpenScan={() => setScannerOpen(true)} activeBranch={activeBranch} />}
         {hub === 'inventory' && sub === 'new'      && <NewProducts onOpen={handleOpen} activeBranch={activeBranch} />}
         {hub === 'inventory' && sub === 'analysis' && <Analysis activeBranch={activeBranch} onOpen={handleOpen} />}
+        {hub === 'inventory' && sub === 'dead' && <DeadStock activeBranch={activeBranch} onOpen={handleOpen} />}
 
         {hub === 'ops' && sub === 'orders' && (
           activeSupplier

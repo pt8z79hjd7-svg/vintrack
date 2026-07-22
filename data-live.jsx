@@ -169,6 +169,11 @@ async function loadAllData() {
       is_promo: !!p.is_promo,
       min_stock: n(p.min_stock),
       effective_sell_price: p.effective_sell_price != null ? n(p.effective_sell_price) : null,
+      // ימים מאז מכירה אחרונה — null כשאין נתון (העמודה טרם קיימת / מוצר שמעולם לא נמכר)
+      last_sale_date: p.last_sale_date || null,
+      days_since_sale: p.last_sale_date
+        ? Math.floor((Date.now() - new Date(p.last_sale_date).getTime()) / 86400000)
+        : null,
       promo: PROMO_BY_BARCODE[String(p.barcode)] || null,
       created_at: p.created_at || '',
       updated_at: p.updated_at || '',
