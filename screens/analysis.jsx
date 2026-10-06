@@ -66,7 +66,20 @@ const Analysis = ({ activeBranch = 'both', onOpen }) => {
 
   // ─── גוף הטבלה לקטגוריה הפתוחה ───
   const renderBody = (id) => {
-    if (id === 'neg') return (
+    if (id === 'neg') {
+      // מעקב "נמכר בלי מלאי": כל שלילי = סחורה שנמכרה בלי תעודת רכש מוקלדת. המספרים יורדים
+      // כשמקלידים בקופה את החשבוניות החסרות (גם בתאריך-אחורה — הדוחות החודשיים יורדים מחדש כל יום).
+      const negUnits = (p) => Math.min(p.stock.mikado || 0, 0) + Math.min(p.stock.kohav || 0, 0);
+      const units = negative.reduce((s, p) => s + negUnits(p), 0);
+      const value = negative.reduce((s, p) => s + negUnits(p) * (p.cost || 0), 0);
+      return (
+      <>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)', fontSize: 13, display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+        <span><b>{negative.length}</b> מוצרים</span>
+        <span><b>{Math.abs(units).toLocaleString('he-IL')}</b> יחידות נמכרו בלי מלאי רשום</span>
+        <span>שווי בעלות: <b>₪{Math.abs(Math.round(value)).toLocaleString('he-IL')}</b></span>
+        <span className="muted">יורד כשמקלידים בקופה את תעודות הרכש החסרות</span>
+      </div>
       <table className="tbl">
         <thead><tr><th>מוצר</th><th>ספק</th><th style={tc}>מיקדו</th><th style={tc}>כוכב</th></tr></thead>
         <tbody>
@@ -81,7 +94,9 @@ const Analysis = ({ activeBranch = 'both', onOpen }) => {
           {!negative.length && emptyRow(4, 'אין מלאי שלילי 🎉')}
         </tbody>
       </table>
-    );
+      </>
+      );
+    }
     if (id === 'below') return (
       <table className="tbl">
         <thead><tr><th>מוצר</th><th>ספק</th><th style={te}>מלאי</th><th style={te}>סף</th><th style={te}>חסר</th></tr></thead>
