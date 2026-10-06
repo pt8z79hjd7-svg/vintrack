@@ -22,9 +22,13 @@ const Sales = ({ activeBranch = 'both', onOpen }) => {
   const wprofit = (p) => (p.weekly || 0) * ppu(p);           // רווח שבועי משוער ₪
 
   const [view, setView] = useState('money');
+  // מוצר בלי עלות → כל המחיר נספר כרווח והוא "קופץ" לראש הרשימות. רווח מחושב רק כשיש עלות.
+  const hasCost = (p) => (p.cost || 0) > 0;
+  const PC = P.filter(hasCost);
+  const noCost = P.filter((p) => !hasCost(p)).sort((a, b) => (b.weekly || 0) - (a.weekly || 0));
   const lists = {
-    margin:  [...P].sort((a, b) => effMargin(b) - effMargin(a)).slice(0, 30),
-    money:   [...P].sort((a, b) => wprofit(b) - wprofit(a)).slice(0, 30),
+    margin:  [...PC].sort((a, b) => effMargin(b) - effMargin(a)).slice(0, 30),
+    money:   [...PC].sort((a, b) => wprofit(b) - wprofit(a)).slice(0, 30),
     sellers: [...P].sort((a, b) => (b.weekly || 0) - (a.weekly || 0)).slice(0, 30),
   };
   const promos = P.filter((p) => p.is_promo).slice(0, 40);
@@ -102,6 +106,25 @@ const Sales = ({ activeBranch = 'both', onOpen }) => {
       >
         <Table items={rows} />
       </Card>
+
+      {noCost.length > 0 && (
+        <Card title="⚠️ נמכרים בלי מחיר עלות" sub={`${noCost.length} פריטים — לא נכללים ברשימות הרווח עד שתוזן עלות`}>
+          <div className="table-wrap">
+            <table className="tbl">
+              <thead><tr><th>מוצר</th><th>ספק</th><th style={te}>מחיר רשמי</th><th style={te}>נמכר בשבוע</th></tr></thead>
+              <tbody>
+                {noCost.slice(0, 40).map((p) => (
+                  <tr key={p.id || p.barcode} onClick={() => onOpen?.('detail', p)} style={{ cursor: onOpen ? 'pointer' : 'default' }}>
+                    <td>{p.name}</td><td>{p.supplier || '—'}</td>
+                    <td style={te}>₪{(p.price || 0).toFixed(0)}</td>
+                    <td style={te}>{(p.weekly || 0).toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <Card title="🏷️ פריטים במבצע" sub={`${promos.length} פריטים מסומנים כמבצע`}>
         <Table items={promos} />
