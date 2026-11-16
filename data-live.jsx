@@ -460,6 +460,7 @@ async function loadAllData() {
 
   // ─── הגדרות גלובליות (settings: key→value jsonb) ───
   // נטען מ-Supabase; אם הטבלה חסרה (setR.error) — fallback ל-localStorage כדי שהמכשיר הראשי עדיין יעבוד.
+  let CLUB_LIVE = null;    // חברי מועדון (settings['club_live'], נכתב ע"י club_members.py)
   let BONUS_LIVE = null;   // בונוס צוות לפי סכום-קבלה (settings['bonus_live'], נכתב ע"י הצינור)
   const SETTINGS = { profitTarget: 25, defaultMin: 3, categoryMin: {}, showInclVat: true };
   const setRows = (setR && setR.data) ? setR.data : [];
@@ -472,6 +473,11 @@ async function loadAllData() {
         let bv = r.value;
         try { if (typeof bv === 'string') bv = JSON.parse(bv); } catch { bv = null; }
         if (bv && typeof bv === 'object' && bv.months) BONUS_LIVE = bv;
+      }
+      else if (r.key === 'club_live') {
+        let cv = r.value;
+        try { if (typeof cv === 'string') cv = JSON.parse(cv); } catch { cv = null; }
+        if (cv && typeof cv === 'object' && cv.months) CLUB_LIVE = cv;
       }
       else if (r.key === 'category_min') {
         let v = r.value;
@@ -621,7 +627,7 @@ async function loadAllData() {
     BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS: PRODUCTS_FINAL, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH, INVENTORY_VALUE_TOTAL,
     DAILY_DETAILS, APPROVED_PRODUCTS,
-    PROMO_CATEGORIES, PROMO_BY_BARCODE, SETTINGS, FINANCE, BONUS_LIVE,
+    PROMO_CATEGORIES, PROMO_BY_BARCODE, SETTINGS, FINANCE, BONUS_LIVE, CLUB_LIVE,
     EMPLOYEES, EMPLOYEE_HOURS, GENERIC_PRODUCTS, EXTERNAL_CLIENTS,
     SUPPLIER_PURCHASES, SUPPLIER_TERMS,
     BARCODE_ALIAS: _barcodeAlias,

@@ -20,6 +20,7 @@ const NAV_HUBS = [
     { id: 'monthly',   label: 'חודשי',   Icon: ITrend },
     { id: 'sales',     label: 'מכירות',  Icon: ICoin },
     { id: 'employees', label: 'עובדים',  Icon: IUsers },
+    { id: 'club',      label: 'מועדון',  Icon: IUsers },
   ] },
   { id: 'settings',  label: 'הגדרות',  Icon: ISettings, subs: [
     { id: 'settings', label: 'הגדרות', Icon: ISettings },
@@ -39,6 +40,7 @@ const NAV_ALIAS = {
   monthly:          { hub: 'insights',  sub: 'monthly' },
   sales:            { hub: 'insights',  sub: 'sales' },
   'employee-sales': { hub: 'insights',  sub: 'employees' },
+  club:             { hub: 'insights',  sub: 'club' },
   settings:         { hub: 'settings',  sub: 'settings' },
 };
 const HUB_IDS = new Set(NAV_HUBS.map(h => h.id));
@@ -392,6 +394,7 @@ function App() {
         {hub === 'insights' && sub === 'monthly'   && <Monthly activeBranch={activeBranch} />}
         {hub === 'insights' && sub === 'sales'     && <Sales activeBranch={activeBranch} onOpen={handleOpen} />}
         {hub === 'insights' && sub === 'employees' && <EmployeeSales activeBranch={activeBranch} />}
+        {hub === 'insights' && sub === 'club'      && <Club activeBranch={activeBranch} />}
 
         {hub === 'settings' && <Settings activeBranch={activeBranch} />}
       </main>
