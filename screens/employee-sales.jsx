@@ -16,6 +16,150 @@ const NAME_ALIAS = {
 };
 const canonName = (n) => NAME_ALIAS[n] || n;
 
+// ─── לשונית בונוס צוות — קופה לפי סכום-קבלה (settings['bonus_live'], מתעדכן בכל מחזור) ───
+const BONUS_HEB_MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+const BonusTab = () => {
+  const B = window.BONUS_LIVE;
+  const [mk, setMk] = useState(B ? B.current : '');
+  if (!B || !B.months || !B.months[B.current]) {
+    return (
+      <Card>
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-3)' }}>
+          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>אין עדיין נתוני בונוס</div>
+          <div style={{ fontSize: 13 }}>הנתון נכתב על-ידי המחזור האוטומטי — יופיע אחרי הסנכרון הבא.</div>
+        </div>
+      </Card>
+    );
+  }
+  const month = B.months[mk] ? mk : B.current;
+  const m = B.months[month];
+  const isCur = !m.final;
+  const fmt = (v) => `₪${Math.round(v || 0).toLocaleString('he-IL')}`;
+  const mLabel = (k) => { const p = k.split('-'); return `${BONUS_HEB_MONTHS[Number(p[1]) - 1]} ${p[0]}`; };
+  const te = { textAlign: 'end', fontVariantNumeric: 'tabular-nums' };
+  const br = m.branches || {};
+  const mik = br.mikado || {};
+  const koh = br.kohav || {};
+  const firstTier = ((B.tiers || [])[0] || {}).from || 0;
+
+  // חלוקה לפי שעות בפועל (employee_hours של אותו חודש)
+  const emps = window.EMPLOYEES || [];
+  const split = emps.map((emp) => {
+    const h = (window.EMPLOYEE_HOURS || {})[`${emp.id}__${month}`] || {};
+    const hrs = (Number(h.regular_hours) || 0) + (Number(h.extra_hours_125) || 0) + (Number(h.extra_hours_150) || 0);
+    return { name: emp.name, hrs: hrs };
+  }).filter((r) => r.hrs > 0).sort((a, b) => b.hrs - a.hrs);
+  const totalHrs = split.reduce((s, r) => s + r.hrs, 0);
+  const tiers = (B.tiers || []).map((t, i) => {
+    return { from: t.from, bonus: t.bonus, cnt: (m.tiers || [])[i] || 0 };
+  }).filter((t) => t.cnt > 0);
+  const days = (m.days || []).slice().reverse();
+  const maxDay = Math.max(1, ...days.map((d) => d.pool || 0));
+  const kpi = (label, value, sub) => (
+    <Card>
+      <div style={{ padding: 14 }}>
+        <div className="muted" style={{ fontSize: 12 }}>{label}</div>
+        <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+        {sub ? <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{sub}</div> : null}
+      </div>
+    </Card>
+  );
+
+  return (
+    <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+      <div className="between" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <div className="chips">
+          {[B.current, B.previous].filter((k) => B.months[k]).map((k) => (
+            <button key={k} className={`chip ${month === k ? 'active' : ''}`} onClick={() => setMk(k)}>{mLabel(k)}</button>
+          ))}
+        </div>
+        <div className="muted" style={{ fontSize: 12 }}>עודכן: {B.updated}</div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+        {kpi('קופת בונוס', fmt(m.pool), `${m.paid} קבלות מזכות מתוך ${m.receipts}`)}
+        {isCur ? kpi('צפי לסוף החודש', fmt(m.forecast), `${m.days_open} מתוך ~${m.exp_days} ימי עבודה`)
+               : kpi('סטטוס', 'סופי', `${m.days_open} ימי עבודה`)}
+        {kpi('למשרה מלאה', fmt(m.forecast_full_time), `₪${m.per_hour} לשעה · ${B.full_time_hours} שעות`)}
+        {kpi('כמעט-בונוס', m.near, `קבלות ₪${firstTier - 50}–${firstTier}`)}
+      </div>
+
+      <Card>
+        <div style={{ padding: 14 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>לפי סניף</div>
+          <table className="table" style={{ width: '100%' }}>
+            <thead><tr><th>סניף</th><th style={te}>קבלות</th><th style={te}>מזכות</th><th style={te}>קופה</th></tr></thead>
+            <tbody>
+              <tr><td>מיקדו</td><td style={te}>{mik.rec || 0}</td><td style={te}>{mik.paid || 0}</td><td style={te}>{fmt(mik.pool)}</td></tr>
+              <tr><td>כוכב הצפון</td><td style={te}>{koh.rec || 0}</td><td style={te}>{koh.paid || 0}</td><td style={te}>{fmt(koh.pool)}</td></tr>
+            </tbody>
+          </table>
+          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            זיכויים שקיזזו בונוס: {m.refunds} · הזמנות מיוחדות (לא נספרות): {m.special}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div style={{ padding: 14 }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>חלוקה לפי שעות — {mLabel(month)}</div>
+          {split.length === 0 ? (
+            <div className="muted" style={{ fontSize: 13 }}>אין שעות רשומות לחודש זה (לשונית שכר).</div>
+          ) : (
+            <div>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                {isCur ? 'חישוב על הקופה שנצברה עד כה, לפי שעות שנרשמו עד כה.' : 'חישוב על הקופה הסופית.'} סה"כ {Math.round(totalHrs)} שעות.
+              </div>
+              <table className="table" style={{ width: '100%' }}>
+                <thead><tr><th>עובד</th><th style={te}>שעות</th><th style={te}>חלק</th><th style={te}>בונוס</th></tr></thead>
+                <tbody>
+                  {split.map((r) => (
+                    <tr key={r.name}>
+                      <td>{r.name}</td>
+                      <td style={te}>{Math.round(r.hrs * 10) / 10}</td>
+                      <td style={te}>{Math.round(r.hrs / totalHrs * 100)}%</td>
+                      <td style={{ textAlign: 'end', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(m.pool * r.hrs / totalHrs)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <div style={{ padding: 14 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>מדרגות (סכום קבלה כולל מע"מ)</div>
+          <table className="table" style={{ width: '100%' }}>
+            <thead><tr><th>מ-₪</th><th style={te}>בונוס לקבלה</th><th style={te}>קבלות</th><th style={te}>סה"כ</th></tr></thead>
+            <tbody>
+              {tiers.map((t) => (
+                <tr key={t.from}><td>{t.from}+</td><td style={te}>₪{t.bonus}</td><td style={te}>{t.cnt}</td><td style={te}>{fmt(t.cnt * t.bonus)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card>
+        <div style={{ padding: 14 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>יומי</div>
+          {days.map((d) => (
+            <div key={d.d} style={{ display: 'grid', gridTemplateColumns: '54px 1fr 64px', gap: 8, alignItems: 'center', fontSize: 12, padding: '3px 0' }}>
+              <span className="muted">{d.d.slice(8, 10)}/{d.d.slice(5, 7)}</span>
+              <div style={{ background: 'var(--line, #e5e7eb)', borderRadius: 4, height: 10, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.max(0, (d.pool || 0) / maxDay * 100)}%`, height: '100%', background: 'var(--brand, #0d7377)' }} />
+              </div>
+              <span style={te} title={`${d.paid} מזכות מתוך ${d.rec}`}>{fmt(d.pool)}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+};
+
 const EmployeeSales = ({ activeBranch = 'both' }) => {
   useLiveData();
   const [subTab, setSubTab] = useState('sales');   // 'sales' | 'payroll'
@@ -236,7 +380,7 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
         <div>
           <div className="crumbs">דוחות</div>
           <div className="page-title" style={{ fontSize: 22, marginTop: 4 }}>
-            עובדים — {subTab === 'sales' ? 'מכירות' : 'שכר'}
+            עובדים — {subTab === 'sales' ? 'מכירות' : subTab === 'bonus' ? 'בונוס צוות' : 'שכר'}
           </div>
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
             {subTab === 'sales' ? (
@@ -246,6 +390,8 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
                   <span> · {activeBranch === 'mikado' ? 'מיקדו' : 'כוכב הצפון'} (עובדים שעבדו בסניף; סכומים מאוחדים לכל הסניפים)</span>
                 )}
               </>
+            ) : subTab === 'bonus' ? (
+              <>קופה משותפת לפי סכום הקבלה · מתחלקת לפי שעות</>
             ) : (
               <>{(window.EMPLOYEES || []).length} עובדים פעילים · חודש: {monthLabel(payrollMonth)}</>
             )}
@@ -274,7 +420,12 @@ const EmployeeSales = ({ activeBranch = 'both' }) => {
         <button className={`chip ${subTab === 'payroll' ? 'active' : ''}`} onClick={() => setSubTab('payroll')}>
           💰 שכר
         </button>
+        <button className={`chip ${subTab === 'bonus' ? 'active' : ''}`} onClick={() => setSubTab('bonus')}>
+          🎯 בונוס
+        </button>
       </div>
+
+      {subTab === 'bonus' && <BonusTab />}
 
       {/* ════════════ לשונית שכר ════════════ */}
       {subTab === 'payroll' && (() => {
