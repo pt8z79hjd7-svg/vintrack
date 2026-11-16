@@ -112,6 +112,14 @@ const DeadStock = ({ activeBranch = 'both', onOpen }) => {
       <Card
         title="💀 מלאי מת — מחירון חיסול ועמלות"
         sub={`${shown.length} מוצרים · עמלה משולמת על מכירה במחיר המבצע · מחיר רצפה = עלות + מע"מ`}
+        action={<ExportBtn onClick={() => exportCsv('מלאי_מת', [
+          ['ברקוד', (r) => r.p.sku], ['שם', (r) => r.p.name], ['ספק', (r) => r.p.supplier],
+          ['מלאי מיקדו', (r) => r.p.stock.mikado], ['מלאי כוכב הצפון', (r) => r.p.stock.kohav],
+          ['ימים בלי מכירה', (r) => (r.days == null ? 'מעולם' : r.days)], ['דרגה', (r) => r.tier.label],
+          ['עלות (ללא מע"מ)', (r) => r.p.cost], ['מחיר מדף (כולל מע"מ)', (r) => r.p.price],
+          ['מחיר מבצע (כולל מע"מ)', (r) => (r.fake ? 'חסר תמחור' : Math.round(r.promo))],
+          ['עמלה לבקבוק', (r) => r.comm.toFixed(1)], ['הון כלוא (עלות)', (r) => Math.round(r.locked)],
+        ], shown)} />}
       >
         <div className="table-wrap">
           <table className="tbl">

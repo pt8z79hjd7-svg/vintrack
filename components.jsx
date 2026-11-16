@@ -436,3 +436,36 @@ function MobileCardList({ items, renderCard, onTap, keyOf, empty }) {
   );
 }
 window.MobileCardList = MobileCardList;
+
+// === exportCsv — ייצוא טבלה ל-CSV שנפתח באקסל (UTF-8 BOM, עברית תקינה) ===
+// cols: [[כותרת, (row) => ערך], ...]. שם הקובץ מקבל תאריך אוטומטית.
+function exportCsv(name, cols, rows) {
+  const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  const lines = [cols.map((c) => esc(c[0])).join(',')]
+    .concat(rows.map((r, i) => cols.map((c) => esc(c[1](r, i))).join(',')));
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${name}_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  window.toast && window.toast.ok && window.toast.ok(`יוצאו ${rows.length} שורות`, 2500);
+}
+window.exportCsv = exportCsv;
+
+// עמודות-מוצר סטנדרטיות. מחיר מכירה כולל מע"מ, עלות ללא מע"מ, מרווח על נטו.
+const PRODUCT_CSV_COLS = [
+  ['ברקוד', (p) => p.sku], ['שם', (p) => p.name], ['ספק', (p) => p.supplier], ['קטגוריה', (p) => p.cat],
+  ['מלאי מיקדו', (p) => p.stock.mikado], ['מלאי כוכב הצפון', (p) => p.stock.kohav],
+  ['עלות (ללא מע"מ)', (p) => p.cost || ''], ['מחיר מכירה (כולל מע"מ)', (p) => p.price || ''],
+  ['מרווח %', (p) => { const net = (p.price || 0) / 1.18; return net > 0 && p.cost > 0 ? ((net - p.cost) / net * 100).toFixed(1) : ''; }],
+  ['מכירה שבועית', (p) => p.weekly || 0], ['ימים מאז מכירה', (p) => (p.days_since_sale == null ? '' : p.days_since_sale)],
+];
+window.PRODUCT_CSV_COLS = PRODUCT_CSV_COLS;
+
+const ExportBtn = ({ onClick, label = 'ייצוא' }) => (
+  <button className="btn" onClick={onClick} title="ייצוא לקובץ CSV (נפתח באקסל)"><IDownload size={15} /> {label}</button>
+);
+window.ExportBtn = ExportBtn;

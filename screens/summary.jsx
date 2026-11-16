@@ -244,7 +244,12 @@ const DailyExpanded = ({ date, hasData, activeBranch = 'both' }) => {
 
       {/* 🏆 מובילי היום */}
       {top_sellers.length > 0 && (
-        <Card title="🏆 מובילי היום" sub={`${top_sellers.length} מוצרים מובילים לפי הכנסה`}>
+        <Card title="🏆 מובילי היום" sub={`${top_sellers.length} מוצרים מובילים לפי הכנסה`}
+              action={<ExportBtn onClick={() => exportCsv('מובילי_היום', [
+                ['ברקוד', (x) => x.barcode || ''], ['מוצר', (x) => x.name], ['כמות', (x) => x.qty],
+                ['הכנסה (כולל מע"מ)', (x) => Math.round(x.revenue)],
+                ['מחיר ליחידה בפועל (כולל מע"מ)', (x) => (x.qty > 0 ? (x.revenue / x.qty).toFixed(1) : '')],
+              ], top_sellers)} />}>
           <div className="table-wrap">
             <table className="tbl">
               <thead>

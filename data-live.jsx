@@ -460,6 +460,8 @@ async function loadAllData() {
 
   // ─── הגדרות גלובליות (settings: key→value jsonb) ───
   // נטען מ-Supabase; אם הטבלה חסרה (setR.error) — fallback ל-localStorage כדי שהמכשיר הראשי עדיין יעבוד.
+  let ALERTS_LIVE = null;  // התראות מהצינור (settings['alerts_live']) — הנחות ספק שלא הוקלדו
+  let COVERAGE_ATTENTION = [];  // ימים חסרים/חלקיים מול הקופה (settings['daily_coverage'].attention)
   let CLUB_LIVE = null;    // חברי מועדון (settings['club_live'], נכתב ע"י club_members.py)
   let BONUS_LIVE = null;   // בונוס צוות לפי סכום-קבלה (settings['bonus_live'], נכתב ע"י הצינור)
   const SETTINGS = { profitTarget: 25, defaultMin: 3, categoryMin: {}, showInclVat: true };
@@ -473,6 +475,14 @@ async function loadAllData() {
         let bv = r.value;
         try { if (typeof bv === 'string') bv = JSON.parse(bv); } catch { bv = null; }
         if (bv && typeof bv === 'object' && bv.months) BONUS_LIVE = bv;
+      }
+      else if (r.key === 'alerts_live' || r.key === 'daily_coverage') {
+        let av = r.value;
+        try { if (typeof av === 'string') av = JSON.parse(av); } catch { av = null; }
+        if (av && typeof av === 'object') {
+          if (r.key === 'alerts_live') ALERTS_LIVE = av;
+          else if (Array.isArray(av.attention)) COVERAGE_ATTENTION = av.attention;
+        }
       }
       else if (r.key === 'club_live') {
         let cv = r.value;
@@ -627,7 +637,7 @@ async function loadAllData() {
     BRANCHES, CATEGORIES, SUPPLIERS, PRODUCTS: PRODUCTS_FINAL, MONTHLY, DAILY_SAMPLE, DAILY_BY_DATE,
     ORDERS, TRANSFERS, PROMOTIONS, ACTIVITY: [], INVENTORY_VALUE_BY_MONTH, INVENTORY_VALUE_TOTAL,
     DAILY_DETAILS, APPROVED_PRODUCTS,
-    PROMO_CATEGORIES, PROMO_BY_BARCODE, SETTINGS, FINANCE, BONUS_LIVE, CLUB_LIVE,
+    PROMO_CATEGORIES, PROMO_BY_BARCODE, SETTINGS, FINANCE, BONUS_LIVE, CLUB_LIVE, ALERTS_LIVE, COVERAGE_ATTENTION,
     EMPLOYEES, EMPLOYEE_HOURS, GENERIC_PRODUCTS, EXTERNAL_CLIENTS,
     SUPPLIER_PURCHASES, SUPPLIER_TERMS,
     BARCODE_ALIAS: _barcodeAlias,

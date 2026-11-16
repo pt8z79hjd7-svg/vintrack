@@ -235,7 +235,10 @@ const Analysis = ({ activeBranch = 'both', onOpen }) => {
 
       {/* ─── הרשימה של הקטגוריה הפתוחה בלבד ─── */}
       {cur ? (
-        <Card title={cur.label} sub={`${cur.items.length} פריטים`}>
+        <Card title={cur.label} sub={`${cur.items.length} פריטים`}
+              action={['neg', 'below', 'dead', 'push'].includes(cur.id) && cur.items.length > 0
+                ? <ExportBtn onClick={() => exportCsv(cur.label.replace(/ /g, '_'), PRODUCT_CSV_COLS, cur.items.map((x) => x.p || x).filter((x) => x && x.stock))} />
+                : null}>
           <div className="table-wrap">{renderBody(cur.id)}</div>
         </Card>
       ) : (

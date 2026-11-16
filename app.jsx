@@ -266,7 +266,7 @@ function App() {
 
         <div className="search-bar search-with-scan" style={{ position: 'relative' }}>
           <ISearch size={15} />
-          <input placeholder="חיפוש מוצר, ברקוד, ספק…" value={globalQ}
+          <input placeholder="חיפוש מוצר, ברקוד, ספק, חבר מועדון…" value={globalQ}
                  onChange={(e) => setGlobalQ(e.target.value)}
                  onFocus={() => setSearchFocused(true)}
                  onBlur={() => setTimeout(() => setSearchFocused(false), 200)} />
@@ -276,11 +276,28 @@ function App() {
           {searchFocused && globalQ.length >= 2 && (() => {
             const q = globalQ.toLowerCase();
             const hits = PRODUCTS.filter(p => p.name.toLowerCase().includes(q) || p.sku.includes(globalQ) || p.supplier.toLowerCase().includes(q)).slice(0, 8);
-            if (!hits.length) return (
+            const supHits = (window.SUPPLIERS || []).filter(x => (x.name || '').toLowerCase().includes(q)).slice(0, 3);
+            const _cl = window.CLUB_LIVE || {};
+            const _seenM = new Set();
+            const memHits = (_cl.top || []).concat(_cl.lapsed || [])
+              .filter(m => (m.name || '').toLowerCase().includes(q) && !_seenM.has(m.code) && _seenM.add(m.code)).slice(0, 3);
+            if (!hits.length && !supHits.length && !memHits.length) return (
               <div className="search-dropdown"><div style={{ padding: '12px 16px', color: 'var(--ink-3)', fontSize: 13 }}>לא נמצא</div></div>
             );
             return (
               <div className="search-dropdown">
+                {supHits.map(x => (
+                  <div key={'s' + x.id} className="search-hit" onMouseDown={() => { handleNav('orders'); setActiveSupplier(x.id); setGlobalQ(''); }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>🚚 {x.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>ספק · {x.items} מוצרים · פתח הזמנה</div>
+                  </div>
+                ))}
+                {memHits.map(m => (
+                  <div key={'m' + m.code} className="search-hit" onMouseDown={() => { handleNav('club'); setGlobalQ(''); }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>🎫 {m.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>חבר מועדון · {m.visits} ביקורים · קנייה אחרונה לפני {m.days} יום</div>
+                  </div>
+                ))}
                 {hits.map(p => (
                   <div key={p.id} className="search-hit" onMouseDown={() => { handleOpen('detail', p); setGlobalQ(''); }}>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</div>
@@ -334,7 +351,7 @@ function App() {
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
           </button>
-          <button className="icon-btn" title="התראות"><IBell size={18} /><span className="dot" /></button>
+          <NotifBell onNav={handleNav} />
           <button className="icon-btn" title="הגדרות" onClick={() => handleNav('settings')}><ISettings size={18} /></button>
         </div>
       </header>

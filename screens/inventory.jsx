@@ -68,8 +68,7 @@ const Inventory = ({ onOpen, onOpenScan, activeBranch = 'both' }) => {
           </div>
         </div>
         <div className="row">
-          <button className="btn"><IUpload size={16} /> ייבוא CSV</button>
-          <button className="btn"><IDownload size={16} /> ייצוא</button>
+          <ExportBtn onClick={() => exportCsv('מלאי', PRODUCT_CSV_COLS, filtered)} />
           <button className="btn btn-primary" onClick={() => onOpen('add')}>
             <IPlus size={16} /> מוצר חדש
           </button>
